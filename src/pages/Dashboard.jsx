@@ -20,6 +20,28 @@ export default function Dashboard() {
 
     setAdvice(tips);
   };
+  
+  const handleSubmit = async (entry) => {
+	const res = await fetch('/api/submitReading', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(entry)
+	});
+
+	const data = await res.json();
+	console.log(data); // See response in console
+
+	const newEntries = [entry, ...entries];
+	setEntries(newEntries);
+
+	const tips = [];
+	if (entry.ph > 7.6) tips.push("Add 300ml acid");
+	else if (entry.ph < 7.2) tips.push("Add soda ash");
+	if (entry.chlorine < 1.0) tips.push("Add chlorine");
+	if (entry.salt < 2000) tips.push("Add 2kg salt");
+	setAdvice(tips);
+};
+
 
   return (
     <div className="dashboard">
