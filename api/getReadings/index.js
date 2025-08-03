@@ -1,11 +1,10 @@
-const { CosmosClient } = require("@azure/cosmos");
-
 module.exports = async function (context, req) {
   try {
     if (!process.env.COSMOS_CONNECTION_STRING) {
       throw new Error("COSMOS_CONNECTION_STRING environment variable is missing");
     }
 
+    const { CosmosClient } = require("@azure/cosmos");
     const client = new CosmosClient(process.env.COSMOS_CONNECTION_STRING);
     const database = client.database("PoolAppDB");
     const container = database.container("Readings");
@@ -17,7 +16,7 @@ module.exports = async function (context, req) {
   } catch (error) {
     context.res = {
       status: 500,
-      body: { error: error.message, stack: error.stack }
+      body: `Function error: ${error.message}`
     };
   }
 };
