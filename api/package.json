@@ -11,5 +11,8 @@
   "description": "",
   "devDependencies": {
     "azure-functions-core-tools": "^4.1.0"
+  },
+  "dependencies": {
+    "@azure/cosmos": "^4.5.0"
   }
 }
