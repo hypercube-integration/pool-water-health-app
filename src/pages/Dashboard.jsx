@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import LogEntryForm from '../components/LogEntryForm';
 import AdviceCard from '../components/AdviceCard';
 import HistoryList from '../components/HistoryList';
@@ -8,40 +8,45 @@ export default function Dashboard() {
   const [advice, setAdvice] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  // Fetch readings from API when the component loads
+  useEffect(() => {
+    const fetchReadings = async () => {
+      try {
+        const res = await fetch('/api/getReadings');
+        if (!res.ok) throw new Error('Failed to load readings');
+        const data = await res.json();
+        setEntries(data);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchReadings();
+  }, []);
+
   const handleSubmit = async (entry) => {
     setLoading(true);
-
     try {
-      // Send the reading to the Azure Function API
       const res = await fetch('/api/submitReading', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(entry),
       });
 
-      if (!res.ok) {
-        throw new Error(`Error from API: ${res.status}`);
-      }
-
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
       console.log('Azure Function response:', data);
 
-      // Add the new entry to local state
-      const newEntries = [entry, ...entries];
-      setEntries(newEntries);
+      setEntries([entry, ...entries]);
 
-      // Generate basic recommendations
       const tips = [];
       if (entry.ph > 7.6) tips.push('Add 300ml acid');
       else if (entry.ph < 7.2) tips.push('Add soda ash');
-
       if (entry.chlorine < 1.0) tips.push('Add chlorine');
       if (entry.salt < 2000) tips.push('Add 2kg salt');
 
       setAdvice(tips);
-    } catch (error) {
-      console.error('Error submitting reading:', error);
-      alert('Failed to submit reading. Please try again.');
+    } catch (err) {
+      console.error('Error submitting reading:', err);
     } finally {
       setLoading(false);
     }
