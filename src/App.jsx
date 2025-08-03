@@ -4,7 +4,7 @@ import './styles.css';
 function App() {
   return (
     <div className="app">
-      <h1>🏊 Pool Health Tracker</h1>
+      <h1>🏊 Pool Water Health</h1>
       <Dashboard />
     </div>
   );
