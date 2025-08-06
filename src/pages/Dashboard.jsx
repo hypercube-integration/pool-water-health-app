@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import LogEntryForm from '../components/LogEntryForm';
 import AdviceCard from '../components/AdviceCard';
 import HistoryList from '../components/HistoryList';
+import TrendChart from '../components/TrendChart';
 
 export default function Dashboard() {
   const [entries, setEntries] = useState([]);
@@ -44,12 +45,10 @@ export default function Dashboard() {
       });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
-      await res.json(); // not used directly, but confirms success
+      await res.json();
 
-      // Refresh from server so ordering/contents match Cosmos DB
       await fetchReadings();
 
-      // Generate advice based on the submitted entry
       const tips = [];
       if (entry.ph > 7.6) tips.push('Add 300ml acid');
       else if (entry.ph < 7.2) tips.push('Add soda ash');
@@ -73,6 +72,31 @@ export default function Dashboard() {
       {error && <p style={{ color: '#b00020' }}>⚠️ {error}</p>}
 
       <AdviceCard advice={advice} />
+
+      <TrendChart
+        data={entries}
+        dataKey="ph"
+        color="#ff7300"
+        label="pH"
+        unit=""
+      />
+
+      <TrendChart
+        data={entries}
+        dataKey="chlorine"
+        color="#387908"
+        label="Chlorine"
+        unit="ppm"
+      />
+
+      <TrendChart
+        data={entries}
+        dataKey="salt"
+        color="#0088FE"
+        label="Salt"
+        unit="ppm"
+      />
+
       <HistoryList entries={entries} />
     </div>
   );
