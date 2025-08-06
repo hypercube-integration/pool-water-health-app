@@ -7,9 +7,11 @@ import {
   Tooltip,
   Legend,
   ReferenceArea,
+  ReferenceLine,
   ResponsiveContainer
 } from 'recharts';
 
+// Target zones for guidance
 const targetZones = {
   ph: { min: 7.2, max: 7.6, unit: '' },
   chlorine: { min: 1.0, max: 3.0, unit: 'ppm' },
@@ -25,22 +27,40 @@ export default function TrendChart({ data, dataKey, color, label, unit }) {
         {label} Trend
       </h3>
       <ResponsiveContainer>
-        <LineChart data={data}>
+        <LineChart
+          data={data}
+          margin={{ top: 10, right: 30, left: 60, bottom: 5 }}
+        >
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="date" tickFormatter={formatDate} />
-          <YAxis unit={unit} domain={['auto', 'auto']} />
-          <Tooltip formatter={(value) => `${value} ${unit}`} labelFormatter={formatDate} />
+          <YAxis
+            unit={unit}
+            domain={['dataMin - 1', 'dataMax + 1']}
+            tick={{ dx: -4 }}
+          />
+          <Tooltip
+            formatter={(value) => `${value} ${unit}`}
+            labelFormatter={formatDate}
+          />
           <Legend />
 
-          {/* Reference zone (target range) */}
           {zone && (
-            <ReferenceArea
-              y1={zone.min}
-              y2={zone.max}
-              strokeOpacity={0.1}
-              fill="#a0f0a0"
-              fillOpacity={0.3}
-            />
+            <>
+              <ReferenceArea
+                y1={zone.min}
+                y2={zone.max}
+                strokeOpacity={0.1}
+                fill="#a0f0a0"
+                fillOpacity={0.3}
+              />
+              {/* Optional visual guide line — can remove if not needed */}
+              <ReferenceLine
+                y={zone.min}
+                stroke="red"
+                strokeDasharray="3 3"
+                label={`Min ${zone.min}${zone.unit}`}
+              />
+            </>
           )}
 
           <Line
@@ -57,6 +77,7 @@ export default function TrendChart({ data, dataKey, color, label, unit }) {
   );
 }
 
+// Helper: Format date for X-axis and tooltip
 function formatDate(dateStr) {
   const d = new Date(dateStr);
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
