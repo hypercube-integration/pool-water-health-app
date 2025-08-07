@@ -1,84 +1,59 @@
+import React from 'react';
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ReferenceArea,
-  ReferenceLine,
-  ResponsiveContainer
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea
 } from 'recharts';
 
-// Target zones for guidance
-const targetZones = {
-  ph: { min: 7.2, max: 7.6, unit: '' },
-  chlorine: { min: 1.0, max: 3.0, unit: 'ppm' },
-  salt: { min: 2000, max: 3500, unit: 'ppm' }
-};
+export default function TrendChart({ entries }) {
+  if (!entries || entries.length === 0) return null;
 
-export default function TrendChart({ data, dataKey, color, label, unit }) {
-  const zone = targetZones[dataKey] || null;
+  const formatData = (key) =>
+    entries.map((entry) => ({
+      date: entry.date,
+      value: parseFloat(entry[key]),
+    }));
 
-  return (
-    <div style={{ width: '100%', height: 300, marginBottom: '2rem' }}>
-      <h3 style={{ textTransform: 'capitalize', marginBottom: '0.5rem' }}>
-        {label} Trend
-      </h3>
-      <ResponsiveContainer>
-        <LineChart
-          data={data}
-          margin={{ top: 10, right: 30, left: 60, bottom: 5 }}
-        >
+  const ChartSection = ({ title, data, lower, upper, unit }) => (
+    <div style={{ width: '100%', height: 300, marginBottom: '40px' }}>
+      <h3 style={{ textAlign: 'center', marginBottom: 10 }}>{title}</h3>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 10, right: 20, bottom: 20, left: 30 }}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="date" tickFormatter={formatDate} />
-          <YAxis
-            unit={unit}
-            domain={['dataMin - 1', 'dataMax + 1']}
-            tick={{ dx: -4 }}
-          />
-          <Tooltip
-            formatter={(value) => `${value} ${unit}`}
-            labelFormatter={formatDate}
-          />
-          <Legend />
-
-          {zone && (
-            <>
-              <ReferenceArea
-                y1={zone.min}
-                y2={zone.max}
-                strokeOpacity={0.1}
-                fill="#a0f0a0"
-                fillOpacity={0.3}
-              />
-              {/* Optional visual guide line — can remove if not needed */}
-              <ReferenceLine
-                y={zone.min}
-                stroke="red"
-                strokeDasharray="3 3"
-                label={`Min ${zone.min}${zone.unit}`}
-              />
-            </>
-          )}
-
-          <Line
-            type="monotone"
-            dataKey={dataKey}
-            stroke={color}
-            strokeWidth={2}
-            dot={{ r: 3 }}
-            name={label}
-          />
+          <XAxis dataKey="date" />
+          <YAxis domain={['auto', 'auto']} tickFormatter={(val) => `${val}${unit || ''}`} />
+          <Tooltip />
+          <Line type="monotone" dataKey="value" stroke="#00bcd4" strokeWidth={2} dot={{ r: 3 }} />
+          <ReferenceArea y1={lower} y2={upper} fill="#c8e6c9" stroke="none" />
         </LineChart>
       </ResponsiveContainer>
     </div>
   );
-}
 
-// Helper: Format date for X-axis and tooltip
-function formatDate(dateStr) {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return (
+    <div style={{ marginTop: '40px' }}>
+      <h2 style={{ textAlign: 'center' }}>📈 Trend</h2>
+
+      <ChartSection
+        title="pH Trend"
+        data={formatData('ph')}
+        lower={7.2}
+        upper={7.6}
+      />
+
+      <ChartSection
+        title="Chlorine Trend"
+        data={formatData('chlorine')}
+        lower={1}
+        upper={3}
+        unit=" ppm"
+      />
+
+      <ChartSection
+        title="Salt Trend"
+        data={formatData('salt')}
+        lower={2500}
+        upper={4000}
+        unit=" ppm"
+      />
+    </div>
+  );
 }
