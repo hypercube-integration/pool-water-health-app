@@ -17,11 +17,11 @@ A cloud-native React + Azure app to help monitor, track, and optimize swimming p
 - ✅ **Edit Existing Entry**  
   _Tech:_ Props-based form reuse, conditional submit/cancel buttons
 
-- ✅ **History Log (last 30 entries)**  
-  _Tech:_ Array map rendering, sorted entries
+- ✅ **Delete Existing Entry**  
+  _Tech:_ React event handling, Azure Function (`deleteReading`), Cosmos DB delete by `id` + `/date` partition key
 
-- ✅ **Edit Button with Aligned Layout**  
-  _Tech:_ Flexbox layout for button alignment
+- ✅ **History Log (last 30 entries)**  
+  _Tech:_ Array map rendering, sorted entries, aligned action buttons with Flexbox
 
 - ✅ **Trend Charts for pH, Chlorine, and Salt**  
   _Tech:_ Recharts (`LineChart`, `ReferenceArea`, `ResponsiveContainer`)
@@ -39,6 +39,9 @@ A cloud-native React + Azure app to help monitor, track, and optimize swimming p
 - ✅ **Update Reading API**  
   _Tech:_ Azure Function, Cosmos DB replace, HTTP PUT
 
+- ✅ **Delete Reading API**  
+  _Tech:_ Azure Function, Cosmos DB delete using item id + partition key `/date`, HTTP DELETE
+
 - ✅ **Fetch Last 30 Readings API**  
   _Tech:_ Azure Function, Cosmos DB query, HTTP GET
 
@@ -51,7 +54,7 @@ A cloud-native React + Azure app to help monitor, track, and optimize swimming p
 
 - ✅ **Cosmos DB (NoSQL)**  
   _Tech:_ Azure Cosmos DB for NoSQL  
-  _Use:_ Pool readings stored as JSON docs (partitioned by date)
+  _Use:_ Pool readings stored as JSON docs (partitioned by `/date`)
 
 ---
 
@@ -88,6 +91,8 @@ api/
 │   └── index.js, function.json
 ├── updateReading/
 │   └── index.js, function.json
+├── deleteReading/
+│   └── index.js, function.json
 ├── exportCSV/
 │   └── index.js, function.json
 ```
@@ -109,16 +114,16 @@ api/
 
 ## 🚀 Status
 
-This MVP is **live and functional**, supporting all CRUD operations (Create, Read, Update), and will soon support **Delete + Authentication**.
+This MVP is **live and functional**, supporting all CRUD operations (Create, Read, Update, Delete), and will soon support **Authentication** for API security.
 
 ---
 
 ## 🔒 Upcoming Features
 
-- [ ] ✅ Delete Entry API + UI  
 - [ ] 🔐 API key or login-based authentication  
 - [ ] 📱 PWA support for offline use  
 - [ ] 📊 Weekly chemical adjustment recommendations  
+- [ ] 📅 Date range filtering for readings display  
 
 ---
 
