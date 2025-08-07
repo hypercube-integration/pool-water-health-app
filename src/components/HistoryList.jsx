@@ -1,11 +1,15 @@
-export default function HistoryList({ entries }) {
+// HistoryList.jsx
+export default function HistoryList({ entries, onEdit }) {
   return (
     <div className="history-list">
-      <h3>Recent Logs</h3>
+      <h2>📜 History (last {entries.length} entries)</h2>
       <ul>
-        {entries.map((entry, i) => (
-          <li key={i}>
-            {entry.date}: pH {entry.ph}, Cl {entry.chlorine}ppm, Salt {entry.salt}ppm
+        {entries.map((entry) => (
+          <li key={entry.id}>
+            📅 {entry.date} | pH: {entry.ph} | Cl: {entry.chlorine} | Salt: {entry.salt}
+            <button onClick={() => onEdit(entry)} style={{ marginLeft: '10px' }}>
+              ✏️ Edit
+            </button>
           </li>
         ))}
       </ul>

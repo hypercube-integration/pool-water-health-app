@@ -1,45 +1,42 @@
-import { useState, useEffect } from 'react';
-import LogEntryForm from '../components/LogEntryForm';
-import AdviceCard from '../components/AdviceCard';
-import HistoryList from '../components/HistoryList';
-import TrendChart from '../components/TrendChart';
+import React, { useEffect, useState } from 'react';
+import LogEntryForm from './LogEntryForm';
+import HistoryList from './HistoryList';
+import TrendChart from './TrendChart';
 
 export default function Dashboard() {
   const [entries, setEntries] = useState([]);
-  const [advice, setAdvice] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  const LIMIT = 30;
-
-  const fetchReadings = async () => {
-    try {
-      setError(null);
-      const res = await fetch(`/api/getReadings?limit=${LIMIT}`);
-      if (!res.ok) throw new Error(`Failed to load readings (${res.status})`);
-      const data = await res.json();
-      setEntries(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error(err);
-      setError(err.message || 'Failed to load readings');
-    } finally {
-      setInitialLoading(false);
-    }
-  };
+  const [editEntry, setEditEntry] = useState(null);
+  const [advice, setAdvice] = useState([]);
 
   useEffect(() => {
     fetchReadings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const fetchReadings = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/getReadings?limit=30');
+      if (!res.ok) throw new Error('Failed to fetch readings');
+      const data = await res.json();
+      setEntries(data);
+    } catch (err) {
+      console.error('Fetch error:', err);
+      setError('Error fetching data.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (entry) => {
     setLoading(true);
     setError(null);
+    const isEdit = !!entry.id;
 
     try {
-      const res = await fetch('/api/submitReading', {
-        method: 'POST',
+      const res = await fetch(`/api/${isEdit ? 'updateReading' : 'submitReading'}`, {
+        method: isEdit ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(entry),
       });
@@ -48,82 +45,57 @@ export default function Dashboard() {
       await res.json();
 
       await fetchReadings();
-
-      const tips = [];
-      if (entry.ph > 7.6) tips.push('Add 300ml acid');
-      else if (entry.ph < 7.2) tips.push('Add soda ash');
-      if (entry.chlorine < 1.0) tips.push('Add chlorine');
-      if (entry.salt < 2000) tips.push('Add 2kg salt');
-      setAdvice(tips);
+      setAdvice([]);
+      setEditEntry(null);
     } catch (err) {
-      console.error('Error submitting reading:', err);
-      setError(err.message || 'Failed to submit reading');
+      console.error('Submit error:', err);
+      setError(err.message || 'Submission failed.');
     } finally {
       setLoading(false);
     }
   };
 
-  // 🚀 CSV Download handler
+  const handleEdit = (entry) => {
+    setEditEntry(entry);
+  };
+
   const handleDownloadCSV = async () => {
     try {
       const res = await fetch('/api/exportCSV');
-      if (!res.ok) throw new Error(`Error ${res.status}`);
-
+      if (!res.ok) throw new Error('Failed to export CSV');
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
-
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'readings.csv';
-      document.body.appendChild(a);
+      a.download = 'pool_readings.csv';
       a.click();
-      a.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('Download failed:', err);
-      alert('Failed to download CSV. See console for details.');
+      console.error('CSV download error:', err);
+      alert('Error downloading CSV');
     }
   };
 
   return (
     <div className="dashboard">
-      <LogEntryForm onSubmit={handleSubmit} />
+      <h1>🏊 Pool Water Health Dashboard</h1>
 
-      {initialLoading && <p>⏳ Loading readings...</p>}
-      {loading && !initialLoading && <p>⏳ Submitting reading...</p>}
-      {error && <p style={{ color: '#b00020' }}>⚠️ {error}</p>}
-
-      <AdviceCard advice={advice} />
-
-      <button onClick={handleDownloadCSV} style={{ marginBottom: '1rem' }}>
-        📥 Download CSV
-      </button>
-
-      <TrendChart
-        data={entries}
-        dataKey="ph"
-        color="#ff7300"
-        label="pH"
-        unit=""
+      <LogEntryForm
+        onSubmit={handleSubmit}
+        initialValues={editEntry}
+        onCancelEdit={() => setEditEntry(null)}
       />
 
-      <TrendChart
-        data={entries}
-        dataKey="chlorine"
-        color="#387908"
-        label="Chlorine"
-        unit="ppm"
-      />
+      {error && <div className="error">{error}</div>}
+      {loading && <div>Loading...</div>}
 
-      <TrendChart
-        data={entries}
-        dataKey="salt"
-        color="#0088FE"
-        label="Salt"
-        unit="ppm"
-      />
-
-      <HistoryList entries={entries} />
+      {!loading && entries.length > 0 && (
+        <>
+          <button onClick={handleDownloadCSV}>⬇️ Download CSV</button>
+          <HistoryList entries={entries} onEdit={handleEdit} />
+          <TrendChart entries={entries} />
+        </>
+      )}
     </div>
   );
 }
