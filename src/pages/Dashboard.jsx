@@ -13,7 +13,6 @@ export default function Dashboard() {
 
   const LIMIT = 30;
 
-  // Fetch readings from API
   const fetchReadings = async () => {
     try {
       setError(null);
@@ -34,7 +33,6 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Submit a new reading
   const handleSubmit = async (entry) => {
     setLoading(true);
     setError(null);
@@ -51,7 +49,6 @@ export default function Dashboard() {
 
       await fetchReadings();
 
-      // Generate chemical advice
       const tips = [];
       if (entry.ph > 7.6) tips.push('Add 300ml acid');
       else if (entry.ph < 7.2) tips.push('Add soda ash');
@@ -66,12 +63,26 @@ export default function Dashboard() {
     }
   };
 
-  // Trigger CSV download
-  const handleDownloadCSV = () => {
-    const link = document.createElement('a');
-    link.href = '/api/exportCSV';
-    link.download = 'readings.csv';
-    link.click();
+  // 🚀 CSV Download handler
+  const handleDownloadCSV = async () => {
+    try {
+      const res = await fetch('/api/exportCSV');
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'readings.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Download failed:', err);
+      alert('Failed to download CSV. See console for details.');
+    }
   };
 
   return (
