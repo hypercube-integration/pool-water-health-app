@@ -13,6 +13,7 @@ export default function Dashboard() {
 
   const LIMIT = 30;
 
+  // Fetch readings from API
   const fetchReadings = async () => {
     try {
       setError(null);
@@ -33,6 +34,7 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Submit a new reading
   const handleSubmit = async (entry) => {
     setLoading(true);
     setError(null);
@@ -49,6 +51,7 @@ export default function Dashboard() {
 
       await fetchReadings();
 
+      // Generate chemical advice
       const tips = [];
       if (entry.ph > 7.6) tips.push('Add 300ml acid');
       else if (entry.ph < 7.2) tips.push('Add soda ash');
@@ -63,6 +66,14 @@ export default function Dashboard() {
     }
   };
 
+  // Trigger CSV download
+  const handleDownloadCSV = () => {
+    const link = document.createElement('a');
+    link.href = '/api/exportCSV';
+    link.download = 'readings.csv';
+    link.click();
+  };
+
   return (
     <div className="dashboard">
       <LogEntryForm onSubmit={handleSubmit} />
@@ -72,6 +83,10 @@ export default function Dashboard() {
       {error && <p style={{ color: '#b00020' }}>⚠️ {error}</p>}
 
       <AdviceCard advice={advice} />
+
+      <button onClick={handleDownloadCSV} style={{ marginBottom: '1rem' }}>
+        📥 Download CSV
+      </button>
 
       <TrendChart
         data={entries}
