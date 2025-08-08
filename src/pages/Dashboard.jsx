@@ -1,7 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import LogEntryForm from '../components/LogEntryForm';
-import HistoryList from '../components/HistoryList';
-import TrendChart from '../components/TrendChart';
+import LogEntryForm from './LogEntryForm';
+import HistoryList from './HistoryList';
+import TrendChart from './TrendChart';
+
+/** Simple sign-in / sign-out links for Azure Static Web Apps auth (GitHub login) */
+function AuthLinks() {
+  return (
+    <div style={{ textAlign: 'right', marginBottom: 12 }}>
+      <a href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a>
+      {' | '}
+      <a href="/.auth/logout?post_logout_redirect_uri=/">Sign out</a>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const [entries, setEntries] = useState([]);
@@ -76,13 +87,11 @@ export default function Dashboard() {
     setError(null);
 
     try {
-      // Using query params so it’s easy to call from the browser
       const url = `/api/deleteReading?id=${encodeURIComponent(entry.id)}&date=${encodeURIComponent(entry.date)}`;
       const res = await fetch(url, { method: 'DELETE' });
       if (!res.ok) throw new Error(`Delete failed (${res.status})`);
 
       await fetchReadings();
-      // If we were editing this same entry, exit edit mode
       if (editEntry?.id === entry.id) setEditEntry(null);
     } catch (err) {
       console.error('Delete error:', err);
@@ -113,6 +122,7 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard">
+      <AuthLinks />
       <h1>🏊 Pool Water Health Dashboard</h1>
 
       <LogEntryForm

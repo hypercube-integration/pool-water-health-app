@@ -1,0 +1,15 @@
+{
+  "routes": [
+    { "route": "/api/submitReading", "allowedRoles": ["authenticated"] },
+    { "route": "/api/updateReading", "allowedRoles": ["authenticated"] },
+    { "route": "/api/deleteReading", "allowedRoles": ["authenticated"] },
+    { "route": "/api/exportCSV",   "allowedRoles": ["authenticated"] }
+
+    /* To make reads private too, uncomment:
+    ,{ "route": "/api/getReadings", "allowedRoles": ["authenticated"] }
+    */
+  ],
+  "responseOverrides": {
+    "401": { "rewrite": "/login.html", "statusCode": 302 }
+  }
+}
