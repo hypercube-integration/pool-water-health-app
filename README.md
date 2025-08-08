@@ -15,10 +15,12 @@ A cloud-native React + Azure app to help monitor, track, and optimize swimming p
   _Tech:_ React state (`useState`, `useEffect`), controlled inputs
 
 - ✅ **Edit Existing Entry**  
-  _Tech:_ Props-based form reuse, conditional submit/cancel buttons
+  _Tech:_ Props-based form reuse, conditional submit/cancel buttons  
+  _Note:_ In this app, `date` is the Cosmos DB **partition key**, so it cannot be changed during edits without deleting and recreating the entry. To prevent accidental loss of data, the date field is **read-only in edit mode**.
 
 - ✅ **Delete Existing Entry**  
-  _Tech:_ React event handling, Azure Function (`deleteReading`), Cosmos DB delete by `id` + `/date` partition key
+  _Tech:_ React event handling, Azure Function (`deleteReading`), Cosmos DB delete using item id + partition key `/date`  
+  _Note:_ The delete function requires both the `id` and the original `date` (partition key) to find the record in Cosmos DB.
 
 - ✅ **History Log (last 30 entries)**  
   _Tech:_ Array map rendering, sorted entries, aligned action buttons with Flexbox

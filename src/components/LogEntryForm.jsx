@@ -1,77 +1,84 @@
 import React, { useState, useEffect } from 'react';
 
 export default function LogEntryForm({ onSubmit, initialValues, onCancelEdit }) {
-  const [form, setForm] = useState({ date: '', ph: '', chlorine: '', salt: '' });
+  const [formData, setFormData] = useState({
+    id: '',
+    date: '',
+    ph: '',
+    chlorine: '',
+    salt: ''
+  });
 
   useEffect(() => {
     if (initialValues) {
-      setForm({
-        date: initialValues.date || '',
-        ph: initialValues.ph || '',
-        chlorine: initialValues.chlorine || '',
-        salt: initialValues.salt || '',
-        id: initialValues.id || undefined
-      });
-    } else {
-      setForm({ date: '', ph: '', chlorine: '', salt: '' });
+      setFormData(initialValues);
     }
   }, [initialValues]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm(f => ({ ...f, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(form);
-    setForm({ date: '', ph: '', chlorine: '', salt: '' });
+    onSubmit({
+      id: formData.id,
+      date: formData.date,
+      ph: parseFloat(formData.ph),
+      chlorine: parseFloat(formData.chlorine),
+      salt: parseFloat(formData.salt)
+    });
   };
 
   return (
-    <form onSubmit={handleSubmit} className="log-entry-form">
-      <h2>{initialValues ? '✏️ Edit Reading' : '➕ Add Reading'}</h2>
+    <form className="log-entry-form" onSubmit={handleSubmit}>
       <input
         type="date"
         name="date"
-        value={form.date}
+        value={formData.date}
         onChange={handleChange}
         required
+        readOnly={!!initialValues?.id} // Prevent date edits in edit mode
       />
       <input
         type="number"
+        step="0.01"
         name="ph"
-        step="0.1"
-        value={form.ph}
-        onChange={handleChange}
+        value={formData.ph}
         placeholder="pH"
+        onChange={handleChange}
         required
       />
       <input
         type="number"
+        step="0.01"
         name="chlorine"
-        step="0.1"
-        value={form.chlorine}
-        onChange={handleChange}
+        value={formData.chlorine}
         placeholder="Chlorine"
+        onChange={handleChange}
         required
       />
       <input
         type="number"
+        step="0.01"
         name="salt"
-        value={form.salt}
+        value={formData.salt}
+        placeholder="Salt"
         onChange={handleChange}
-        placeholder="Salt (ppm)"
         required
       />
-      <button type="submit">
-        {initialValues ? '💾 Save Changes' : 'Add Reading'}
-      </button>
-      {initialValues && (
-        <button type="button" onClick={onCancelEdit} style={{ marginLeft: '10px' }}>
-          ❌ Cancel
+
+      <div className="form-actions">
+        <button type="submit">
+          {initialValues?.id ? '💾 Save Changes' : '➕ Add Reading'}
         </button>
-      )}
+        {initialValues?.id && (
+          <button type="button" onClick={onCancelEdit} className="cancel-btn">
+            ❌ Cancel
+          </button>
+        )}
+      </div>
     </form>
   );
 }
