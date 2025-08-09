@@ -1,193 +1,137 @@
-# 🏊 Pool Water Health App (MVP)
+# Pool Water Health App
 
-This is the **Pool Water Health** MVP web app, built entirely using **free-tier Azure components** and deployed via **Azure Static Web Apps**.  
-It lets you track daily **pH, chlorine, and salt** readings, view trends, edit/delete entries, export CSV, and requires sign-in for write operations.
+A responsive, Azure-hosted dashboard for tracking and maintaining your pool's chemical balance.  
+Built with **React**, **Vite**, and **Azure Static Web Apps** (free tier), with serverless APIs for secure data operations.
 
 ---
 
 ## 🚀 Features
 
-✅ Add pool readings (pH, chlorine, salt)  
-✅ Edit and delete past readings  
-✅ Download CSV of reading history  
-✅ Trend charts with green target zones  
-✅ Mobile-responsive UI with clean alignment  
-✅ Persistent storage via **Azure Cosmos DB (NoSQL)**  
-✅ Serverless APIs via **Azure Functions**  
-✅ **Secure endpoints** — write/export routes require sign-in  
-✅ **Dynamic login banner** — form is hidden when logged out (via `useAuth()`)
+### 1. **Authentication & Roles**
+- Integrated with **Azure Static Web Apps Authentication** (`/.auth/me`).
+- Role-based UI controls:
+  - **Reader**: View dashboard & charts.
+  - **Writer / Editor / Admin**: Add, edit, delete, and export logs.
 
----
+### 2. **Data Management**
+- Add new readings via `LogEntryForm`.
+- Edit or delete existing readings directly from the **History List**.
+- Data stored and retrieved via Azure serverless APIs.
+- API responses returned as JSON; data validated and type-coerced for charts.
 
-## 🛠 Tech Stack
+### 3. **Date Range Filters**
+- Filter readings by selecting **Start Date** / **End Date**.
+- Common presets: *Last 7 days*, *Last 30 days*, *Last 90 days*, or *Custom*.
+- Automatically refreshes dashboard data when range changes.
 
-| Layer / Feature          | Technology |
-|--------------------------|------------|
-| Frontend UI              | React (Vite) |
-| Styling                  | Custom CSS (responsive) |
-| Charts                   | Recharts |
-| Hosting + Auth           | Azure Static Web Apps (Free) |
-| APIs (serverless)        | Azure Functions (in SWA) |
-| Database                 | Azure Cosmos DB for NoSQL |
-| CI/CD                    | GitHub Actions |
-| CSV Export               | Function-generated CSV |
+### 4. **Charts**
+- Built with **Recharts** and fully responsive:
+  - pH
+  - Chlorine (ppm)
+  - Salt (ppm)
+- **Target range shaded bands** for each parameter:
+  - pH: Orange band
+  - Chlorine: Green band
+  - Salt: Blue band
+- **7-day moving average** overlays (toggleable).
+- Sorts data ascending for left-to-right time flow.
+- Auto-resizes on **mobile orientation change**.
+
+### 5. **Water Care Advisories (NEW)**
+- Calculates advisories based on the **latest reading** in the selected date range.
+- Detects out-of-range pH, chlorine, and salt levels.
+- Severity indicators:
+  - ✅ *All Good*
+  - ℹ️ *Info*
+  - ⚠️ *Attention Needed*
+  - ❗ *Action Required*
+- Offers practical suggestions (e.g., “Add salt gradually and re-test”).
+
+### 6. **Responsive Design**
+- Works seamlessly on desktop, tablet, and mobile browsers.
+- Charts expand to full width in landscape mode.
+- Mobile-friendly date pickers and buttons.
 
 ---
 
 ## 📂 Project Structure
 
-\`\`\`
-pool-water-health-app/
-├── api/                          # Azure Functions
-│   ├── submitReading/
-│   │   ├── index.js
-│   │   └── function.json
-│   ├── getReadings/
-│   │   ├── index.js
-│   │   └── function.json
-│   ├── updateReading/
-│   │   ├── index.js
-│   │   └── function.json
-│   ├── deleteReading/
-│   │   ├── index.js
-│   │   └── function.json
-│   └── exportCSV/
-│       ├── index.js
-│       └── function.json
-├── src/
-│   ├── pages/
-│   │   ├── Dashboard.jsx
-│   │   ├── HistoryList.jsx
-│   │   └── LogEntryForm.jsx
-│   ├── components/
-│   │   └── AuthStatus.jsx
-│   ├── hooks/
-│   │   └── useAuth.js
-│   ├── styles.css
-│   └── main.jsx
-├── staticwebapp.config.json
-├── package.json
-└── README.md
-\`\`\`
+```
+src/
+  components/
+    AdvisoriesPanel.jsx     # Displays current advisories based on latest reading
+    AuthStatus.jsx          # Shows logged-in user and logout link
+    DateRangeControls.jsx   # Date range & preset selector
+    HistoryList.jsx         # Table of historical readings (editable)
+    LogEntryForm.jsx        # Form to add or edit a reading
+    TrendChart.jsx          # Charts for pH, chlorine, salt
+  hooks/
+    useAuth.js              # Gets auth status from /.auth/me
+    useRoleCheck.js         # Checks if user has any of given roles
+  pages/
+    Dashboard.jsx           # Main dashboard page
+  utils/
+    chemistry.js            # Target ranges, advisory logic, moving averages
+styles.css                  # Global styles & dashboard layout
+```
 
 ---
 
-## 🔐 Authentication & API Security
+## 🔧 Local Development
 
-**Static Web Apps** handles sign-in (e.g., GitHub) and forwards an identity header to Functions.  
-We protect routes in `staticwebapp.config.json`, e.g.:
+1. **Clone the repo**
+   ```bash
+   git clone <repo-url>
+   cd pool-water-health-app
+   ```
 
-- Protected: `/api/submitReading`, `/api/updateReading`, `/api/deleteReading`, `/api/exportCSV` → **authenticated only**
-- Optional: make `/api/getReadings` public or authenticated (your choice)
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-The UI uses a custom **`useAuth()`** hook to read `/.auth/me`. If logged out, the form is hidden and a sign-in banner is shown. If a session expires mid-action, the client sees **401** and redirects to sign-in.
-
-### 🔎 How `useAuth()` + SWA Auth Works (Mermaid diagram)
-
-\`\`\`mermaid
-sequenceDiagram
-  autonumber
-  participant U as User (Browser)
-  participant App as React App (Dashboard.jsx)
-  participant Hook as useAuth() Hook
-  participant SWA as Azure Static Web Apps
-  participant API as Azure Functions (/api/*)
-  participant DB as Cosmos DB (NoSQL)
-
-  U->>App: Open site
-  App->>Hook: useAuth() mounts
-  Hook->>SWA: GET /.auth/me (with cookies)
-  alt Logged in
-    SWA-->>Hook: 200 { clientPrincipal: {...userId...} }
-    Hook-->>App: { user, authLoading:false }
-    App-->>U: Show LogEntryForm (Add/Edit), buttons enabled
-  else Logged out
-    SWA-->>Hook: 200 { clientPrincipal: null } (or empty)
-    Hook-->>App: null user
-    App-->>U: Hide form, show "Sign in" banner
-  end
-
-  U->>App: Submit "Add Reading" (if logged in)
-  App->>API: POST /api/submitReading (with auth headers via SWA)
-  API->>DB: Insert reading
-  DB-->>API: OK
-  API-->>App: 200 OK
-  App-->>U: Refresh list & charts
-
-  U->>App: Submit "Add Reading" (if logged out)
-  App->>SWA: (pre-check) GET /.auth/me
-  SWA-->>App: No user
-  App-->>U: Prompt sign-in, redirect to /.auth/login/github
-\`\`\`
+3. **Run locally**
+   ```bash
+   npm run dev
+   ```
+   App will be available at `http://localhost:5173/`
 
 ---
 
-## 🗑 Delete Functionality
+## ☁️ Deployment to Azure Static Web Apps
 
-- Each row in **History** has a 🗑 Delete button.
-- The app calls `/api/deleteReading?id=<id>&date=<date>` (Cosmos requires both **id** and **partition key `/date`**).
-- **Why is Date read-only during edits?**  
-  `date` is the **partition key**. Changing it would require deleting the old doc and creating a new one. To keep things safe and simple, the edit form sets **Date** to read-only.
-
----
-
-## ⚙️ Environment Variables (Functions)
-
-Set these **App Settings** in your Static Web App (Functions app):
-
-| Key                       | Value (example) |
-|---------------------------|-----------------|
-| `COSMOS_CONNECTION_STRING`| *Primary connection string from Cosmos DB → Keys* |
-| *(hard-coded in code)*    | Database: `PoolAppDB`, Container: `Readings` |
-
-> If you used different names for DB/Container, update them in your function code where the client is created.
+1. Push your code to GitHub.
+2. In Azure Portal:
+   - Create a **Static Web App (Free)**.
+   - Connect to your GitHub repo.
+   - Set build presets: **Vite** → `dist` as output folder.
+3. APIs are deployed automatically from `/api`.
 
 ---
 
-## 📊 Trend Charts
+## 🔐 Authentication Notes
 
-- Recharts line charts for **pH**, **Chlorine**, and **Salt**  
-- Green **ReferenceArea** for target zones  
-- Responsive container with fixed height wrapper to prevent clipping  
-- Friendly tooltips and axis formatting
-
----
-
-## 📥 CSV Export
-
-- `GET /api/exportCSV` generates a CSV of all readings
-- Requires authentication (protected by route rules)
-- Client downloads `pool_readings.csv`
+- Use the full URL for `.auth/me` to verify login:
+  ```
+  https://<your-site>.azurestaticapps.net/.auth/me
+  ```
+- To reset stale mobile credentials:
+  - Visit `/logout` then `/login/github` (or other provider).
 
 ---
 
-## 🚀 Deploy (Summary)
+## 🧪 Testing Checklist
 
-1. Push to **GitHub** (main branch).  
-2. **GitHub Actions** builds the Vite app and the Functions.  
-3. SWA deploys the site and APIs under `/api/*`.  
-4. Auth rules from `staticwebapp.config.json` are enforced at the edge.
-
----
-
-## 🧪 Testing Scenarios
-
-- ✅ Add/Edit/Delete readings → 200 OK when signed in  
-- ✅ Download CSV → 200 OK when signed in  
-- ✅ View readings → works when signed in or out (unless you lock it down)  
-- 🚫 Try write/export when logged out → client prompts sign-in (401 flow)
+- [x] Log in as **Reader** → verify read-only dashboard.
+- [x] Log in as **Writer** → verify add/edit/delete functions.
+- [x] Change date range → verify filtered data & advisories update.
+- [x] Toggle 7-day averages → verify line overlay appears/disappears.
+- [x] Mobile rotation → charts resize without breaking layout.
+- [x] Target bands visible on all charts (including Salt green band).
+- [x] Advisories reflect latest reading.
 
 ---
 
-## 📌 Future Ideas
+## 📜 License
 
-- Role-based authorization (e.g., admin-only export)  
-- PWA (installable, offline cache for by-the-pool use)  
-- 7/30-day trend analytics & dosage suggestions  
-- Multi-user: tag readings by `ownerId` and filter in queries
-
----
-
-## 💡 Credits
-
-Built with ❤️ using **React**, **Azure Static Web Apps**, **Azure Functions**, and **Azure Cosmos DB**.
+MIT
