@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import LogEntryForm from './LogEntryForm';
-import HistoryList from './HistoryList';
-import TrendChart from './TrendChart';
+import LogEntryForm from '../components/LogEntryForm';
+import HistoryList from '../components/HistoryList';
+import TrendChart from '../components/TrendChart';
 import AuthStatus from '../components/AuthStatus';
 import useAuth from '../hooks/useAuth';
 
