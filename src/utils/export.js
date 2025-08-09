@@ -1,6 +1,6 @@
 // src/utils/export.js
+import * as XLSX from 'xlsx';
 
-/** RFC4180-safe CSV from rows of plain objects. */
 export function makeCsv(rows, headers) {
   if (!Array.isArray(rows) || rows.length === 0) {
     return (headers || ['date', 'ph', 'chlorine', 'salt']).join(',') + '\n';
@@ -17,11 +17,7 @@ export function makeCsv(rows, headers) {
   const esc = (v) => {
     if (v === null || v === undefined) return '';
     const s = String(v);
-    // Quote if contains comma, quote, CR or LF
-    if (/[",\r\n]/.test(s)) {
-      return '"' + s.replace(/"/g, '""') + '"';
-    }
-    return s;
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
 
   const header = cols.map(esc).join(',');
@@ -41,34 +37,7 @@ export function downloadText(filename, text, mime = 'text/plain;charset=utf-8') 
   URL.revokeObjectURL(url);
 }
 
-/**
- * Lazy-load SheetJS (xlsx) only when needed.
- * - First tries window.XLSX (already loaded).
- * - Otherwise injects CDN script and resolves when ready.
- */
-async function loadXlsxFromCdn() {
-  if (typeof window !== 'undefined' && window.XLSX) return window.XLSX;
-
-  const CDN_URL = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-  await new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = CDN_URL;
-    s.async = true;
-    s.onload = resolve;
-    s.onerror = () => reject(new Error('Failed to load SheetJS from CDN'));
-    document.head.appendChild(s);
-  });
-
-  if (!window.XLSX) {
-    throw new Error('SheetJS failed to initialize.');
-  }
-  return window.XLSX;
-}
-
-/** Export to .xlsx using SheetJS loaded from CDN at runtime (no bundler dep). */
 export async function exportXlsx(filename, rows, sheetName = 'Readings') {
-  const XLSX = await loadXlsxFromCdn();
-
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
