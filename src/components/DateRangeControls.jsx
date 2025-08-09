@@ -10,7 +10,7 @@ const daysAgo = (n) => {
 
 export default function DateRangeControls({ value, onChange }) {
   const [startDate, setStartDate] = useState(value?.startDate || fmt(daysAgo(30)));
-  const [endDate, setEndDate] = useState(value?.endDate || fmt(today)));
+  const [endDate, setEndDate] = useState(value?.endDate || fmt(today));
   const [preset, setPreset] = useState('30d'); // 7d | 30d | 90d | custom
 
   useEffect(() => {
