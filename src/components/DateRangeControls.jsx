@@ -25,16 +25,7 @@ export default function DateRangeControls({ value, onChange }) {
 
   return (
     <div className="date-range">
-      <div className="card">
-        <label>Preset</label>
-        <select value={preset} onChange={(e) => setPreset(e.target.value)}>
-          <option value="7d">Last 7 days</option>
-          <option value="30d">Last 30 days</option>
-          <option value="90d">Last 90 days</option>
-          <option value="custom">Custom…</option>
-        </select>
-      </div>
-
+      {/* Row 1 */}
       <div className="card">
         <label>Start date</label>
         <input
@@ -43,7 +34,6 @@ export default function DateRangeControls({ value, onChange }) {
           onChange={(e) => { setPreset('custom'); setStartDate(e.target.value); }}
         />
       </div>
-
       <div className="card">
         <label>End date</label>
         <input
@@ -54,6 +44,16 @@ export default function DateRangeControls({ value, onChange }) {
         />
       </div>
 
+      {/* Row 2 */}
+      <div className="card">
+        <label>Preset</label>
+        <select value={preset} onChange={(e) => setPreset(e.target.value)}>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+          <option value="90d">Last 90 days</option>
+          <option value="custom">Custom…</option>
+        </select>
+      </div>
       <div className="card actions">
         <button onClick={apply}>Apply</button>
       </div>

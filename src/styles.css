@@ -1,21 +1,23 @@
 /* --- App shell ----------------------------------------------------------- */
-:root{
+:root {
   --radius: 12px;
   --pad: 12px;
   --gap: 12px;
-  --bg-soft: rgba(0,0,0,0.03);
+  --bg-soft: rgba(0, 0, 0, 0.03);
   --border: #e6e6e6;
 }
 
+/* Ensure background extends full height of scroll */
 html, body, #root {
-  height: 100%;
+  min-height: 100%;
+  height: auto;
+  background: #eef8f7; /* subtle pool vibe */
 }
 
 body {
   margin: 0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   color: #0f172a;
-  background: #eef8f7; /* subtle pool vibe */
 }
 
 /* Page container */
@@ -26,6 +28,7 @@ body {
   background: #fff;
   border-radius: 16px;
   box-shadow: 0 6px 24px rgba(0,0,0,0.06);
+  box-sizing: border-box;
 }
 
 /* Headings */
@@ -35,20 +38,16 @@ h1 {
   margin: 8px 0 8px;
   color: #065f46; /* deep teal */
 }
-h3 {
-  margin: 6px 0 8px;
-}
+h3 { margin: 6px 0 8px; }
 
 /* Sections */
-.section {
-  margin: 16px 0;
-}
+.section { margin: 16px 0; }
 
 /* --- Date range controls ------------------------------------------------- */
 .date-range {
   display: grid;
   gap: var(--gap);
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr; /* mobile default: stack */
   align-items: end;
   margin: 12px 0;
 }
@@ -74,10 +73,12 @@ h3 {
   border: 1px solid var(--border);
   border-radius: 10px;
   outline: none;
+  background: #fff;
 }
 
 .date-range .actions {
   display: flex;
+  align-items: flex-end; /* keep button aligned to input bottoms */
   gap: 8px;
 }
 
@@ -90,28 +91,27 @@ button {
   cursor: pointer;
 }
 button:disabled { opacity: .6; cursor: default; }
-button.secondary {
-  background: #e2e8f0;
-  color: #0f172a;
-}
+button.secondary { background: #e2e8f0; color: #0f172a; }
 
-/* Chart cards */
+/* --- Charts -------------------------------------------------------------- */
 .chart-card {
   width: 100%;
   height: auto;
   background: var(--bg-soft);
   border-radius: var(--radius);
   padding: var(--pad);
+  box-sizing: border-box;
+}
+
+/* Adds breathing room between chart drawing area and card edges */
+.chart-inner {
+  padding: 0 12px; /* horizontal padding for the plot area */
+  box-sizing: border-box;
 }
 
 /* Tables */
-.table-wrap {
-  overflow-x: auto;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
 th, td {
   text-align: left;
   padding: 8px 6px;
@@ -119,13 +119,17 @@ th, td {
 }
 
 /* --- Responsive breakpoints --------------------------------------------- */
+/* Tablet/desktop: two columns per row
+   Row 1: Start | End
+   Row 2: Preset | Apply */
 @media (min-width: 560px) {
   .date-range {
     grid-template-columns: 1fr 1fr;
+    grid-auto-flow: row;
   }
 }
-@media (min-width: 820px) {
-  .date-range {
-    grid-template-columns: 1fr 1fr 1fr auto; /* preset | start | end | apply */
-  }
+
+/* Optional: widen container slightly on big screens */
+@media (min-width: 1200px) {
+  .container { max-width: 1200px; }
 }
