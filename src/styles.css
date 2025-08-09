@@ -203,3 +203,7 @@ th, td {
   .chart-card { padding: 8px; }
   .chart-inner { padding: 0 8px; }
 }
+
+/* Advisory list tweaks (optional) */
+.section ul { margin: 0; padding-left: 18px; }
+.section li { line-height: 1.35; }

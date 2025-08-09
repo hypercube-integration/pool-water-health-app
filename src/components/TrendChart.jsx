@@ -1,40 +1,24 @@
 // src/components/TrendChart.jsx
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceArea,
-  Legend,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, ReferenceArea, Legend,
 } from 'recharts';
+import { TARGETS } from '../utils/chemistry';
 
 /**
- * TrendChart
  * Props:
- *  - data: Array<{ date: string, ph?: number, chlorine?: number, salt?: number }>
- *  - height?: number (default 280)
- *  - targetBands?: {
- *      ph?: [number, number],
- *      chlorine?: [number, number],
- *      salt?: [number, number]
- *    }
+ *  - data: Array<{ date: string, ph?: number, chlorine?: number, salt?: number, phAvg7?: number, chlorineAvg7?: number, saltAvg7?: number }>
+ *  - height?: number
+ *  - targetBands?: { ph?: [number,number], chlorine?: [number,number], salt?: [number,number] }
+ *  - showAverages?: boolean (default true)
  */
 export default function TrendChart({
   data = [],
   height = 280,
-  targetBands = {
-    ph: [7.2, 7.6],
-    chlorine: [1.0, 3.0],
-    salt: [3000, 4500],
-  },
+  targetBands = TARGETS,
+  showAverages = true,
 }) {
-  // Ascending sort by date
-  const sorted = [...data].sort((a, b) =>
-    a.date < b.date ? -1 : a.date > b.date ? 1 : 0
-  );
+  const sorted = [...data].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
   return (
     <div className="trend-chart" style={{ display: 'grid', gap: 12 }}>
@@ -49,21 +33,12 @@ export default function TrendChart({
               <Tooltip />
               <Legend />
               {Array.isArray(targetBands?.ph) && (
-                <ReferenceArea
-                  y1={targetBands.ph[0]}
-                  y2={targetBands.ph[1]}
-                  fill="#f97316"       // Orange for pH
-                  fillOpacity={0.15}
-                  stroke="none"
-                />
+                <ReferenceArea y1={targetBands.ph[0]} y2={targetBands.ph[1]} fill="#f97316" fillOpacity={0.15} stroke="none" />
               )}
-              <Line
-                type="monotone"
-                dataKey="ph"
-                stroke="#f97316"
-                dot
-                name="pH"
-              />
+              <Line type="monotone" dataKey="ph" stroke="#f97316" dot name="pH" />
+              {showAverages && (
+                <Line type="monotone" dataKey="phAvg7" stroke="#9a3412" strokeDasharray="5 5" dot={false} name="pH (7-day avg)" />
+              )}
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -80,21 +55,12 @@ export default function TrendChart({
               <Tooltip />
               <Legend />
               {Array.isArray(targetBands?.chlorine) && (
-                <ReferenceArea
-                  y1={targetBands.chlorine[0]}
-                  y2={targetBands.chlorine[1]}
-                  fill="#16a34a"       // Green for Chlorine
-                  fillOpacity={0.15}
-                  stroke="none"
-                />
+                <ReferenceArea y1={targetBands.chlorine[0]} y2={targetBands.chlorine[1]} fill="#16a34a" fillOpacity={0.15} stroke="none" />
               )}
-              <Line
-                type="monotone"
-                dataKey="chlorine"
-                stroke="#16a34a"
-                dot
-                name="Chlorine"
-              />
+              <Line type="monotone" dataKey="chlorine" stroke="#16a34a" dot name="Chlorine" />
+              {showAverages && (
+                <Line type="monotone" dataKey="chlorineAvg7" stroke="#166534" strokeDasharray="5 5" dot={false} name="Chlorine (7-day avg)" />
+              )}
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -111,21 +77,12 @@ export default function TrendChart({
               <Tooltip />
               <Legend />
               {Array.isArray(targetBands?.salt) && (
-                <ReferenceArea
-                  y1={targetBands.salt[0]}
-                  y2={targetBands.salt[1]}
-                  fill="#3b82f6"       // Blue for Salt
-                  fillOpacity={0.15}
-                  stroke="none"
-                />
+                <ReferenceArea y1={targetBands.salt[0]} y2={targetBands.salt[1]} fill="#3b82f6" fillOpacity={0.15} stroke="none" />
               )}
-              <Line
-                type="monotone"
-                dataKey="salt"
-                stroke="#3b82f6"
-                dot
-                name="Salt"
-              />
+              <Line type="monotone" dataKey="salt" stroke="#3b82f6" dot name="Salt" />
+              {showAverages && (
+                <Line type="monotone" dataKey="saltAvg7" stroke="#1e40af" strokeDasharray="5 5" dot={false} name="Salt (7-day avg)" />
+              )}
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -138,13 +95,7 @@ function ChartCard({ title, height, children }) {
   return (
     <section style={{ margin: '8px 0' }}>
       <h3 style={{ margin: '6px 0' }}>{title}</h3>
-      <div
-        className="chart-card"
-        style={{
-          width: '100%',
-          height,
-        }}
-      >
+      <div className="chart-card" style={{ width: '100%', height }}>
         {children}
       </div>
     </section>
