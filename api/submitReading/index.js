@@ -1,28 +1,34 @@
+// api/submitReading/index.js
 const { CosmosClient } = require("@azure/cosmos");
+const { requireAuth } = require("../_shared/auth"); // <-- auth helper
 
 module.exports = async function (context, req) {
-  const reading = req.body;
-
-  if (!reading || !reading.date) {
-    context.res = { status: 400, body: { error: "Missing reading data" } };
-    return;
-  }
+  // 1) Require an authenticated user
+  const user = requireAuth(context, req);
+  if (!user) return; // 401 already set
 
   try {
-    // Connect to Cosmos DB
+    // 2) Validate payload
+    const reading = req.body;
+    if (!reading || !reading.date) {
+      context.res = { status: 400, body: { error: "Missing reading data (requires date, ph, chlorine, salt)" } };
+      return;
+    }
+
+    // 3) Connect to Cosmos
     const client = new CosmosClient(process.env.COSMOS_CONNECTION_STRING);
     const database = client.database("PoolAppDB");
     const container = database.container("Readings");
 
-    // Insert reading into Cosmos DB
-    const { resource: createdItem } = await container.items.create(reading);
+    // 4) (Optional) tag the owner for future filtering/authorization
+    reading.ownerId = user.userId;
 
-    context.res = {
-      status: 200,
-      body: { message: "Reading saved", item: createdItem }
-    };
-  } catch (error) {
-    context.log("Error saving to Cosmos DB:", error);
-    context.res = { status: 500, body: { error: "Database save failed" } };
+    // 5) Insert
+    const { resource: created } = await container.items.create(reading);
+
+    context.res = { status: 200, body: created };
+  } catch (err) {
+    context.log("submitReading error:", err);
+    context.res = { status: 500, body: { error: "Failed to save reading" } };
   }
 };

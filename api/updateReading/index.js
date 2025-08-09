@@ -1,53 +1,39 @@
-const { CosmosClient } = require('@azure/cosmos');
-
-const endpoint = process.env.COSMOS_DB_ENDPOINT;
-const key = process.env.COSMOS_DB_KEY;
-const databaseId = process.env.COSMOS_DB_DATABASE;
-const containerId = process.env.COSMOS_DB_CONTAINER;
-
-const client = new CosmosClient({ endpoint, key });
+const { CosmosClient } = require("@azure/cosmos");
+const { requireAuth } = require("../_shared/auth");
 
 module.exports = async function (context, req) {
-  if (req.method !== 'PUT') {
-    context.res = { status: 405, body: 'Method Not Allowed' };
-    return;
-  }
-
-  const updated = req.body;
-
-  if (!updated || !updated.id) {
-    context.res = { status: 400, body: 'Missing or invalid reading id' };
-    return;
-  }
+  const user = requireAuth(context, req);
+  if (!user) return;
 
   try {
-    const container = client.database(databaseId).container(containerId);
-
-    // Retrieve the existing item
-    const { resource: existing } = await container.item(updated.id, updated.date).read();
-
-    if (!existing) {
-      context.res = { status: 404, body: 'Reading not found' };
+    const updated = req.body;
+    if (!updated || !updated.id || !updated.date) {
+      context.res = { status: 400, body: { error: "Missing id or date" } };
       return;
     }
 
-    // Merge existing fields with new ones
-    const merged = {
-      ...existing,
-      ...updated,
-    };
+    const client = new CosmosClient(process.env.COSMOS_CONNECTION_STRING);
+    const container = client.database("PoolAppDB").container("Readings");
 
+    // Read existing (id + partition key /date)
+    const { resource: existing } = await container.item(updated.id, updated.date).read();
+    if (!existing) {
+      context.res = { status: 404, body: { error: "Reading not found" } };
+      return;
+    }
+
+    // Optional: ensure same owner (if you want to enforce per-user ownership)
+    // if (existing.ownerId && existing.ownerId !== user.userId) {
+    //   context.res = { status: 403, body: { error: "Forbidden" } };
+    //   return;
+    // }
+
+    const merged = { ...existing, ...updated, ownerId: existing.ownerId || user.userId };
     const { resource: saved } = await container.item(merged.id, merged.date).replace(merged);
 
-    context.res = {
-      status: 200,
-      body: saved,
-    };
+    context.res = { status: 200, body: saved };
   } catch (err) {
-    console.error('Update failed:', err);
-    context.res = {
-      status: 500,
-      body: 'Failed to update reading',
-    };
+    context.log("updateReading error:", err);
+    context.res = { status: 500, body: { error: "Failed to update reading" } };
   }
 };

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import LogEntryForm from '../components/LogEntryForm';
 import HistoryList from '../components/HistoryList';
 import TrendChart from '../components/TrendChart';
+import AuthStatus from '../components/AuthStatus';
 
 /** Simple sign-in / sign-out links for Azure Static Web Apps auth (GitHub login) */
 function AuthLinks() {
@@ -122,7 +123,7 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard">
-      <AuthLinks />
+      <AuthStatus />
       <h1>🏊 Pool Water Health Dashboard</h1>
 
       <LogEntryForm

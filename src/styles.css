@@ -142,3 +142,28 @@ button:hover {
   font-weight: bold;
 }
 .delete-btn:hover { background-color: #c62828; }
+
+.auth-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 0.95rem;
+}
+
+.auth-status a {
+  color: #00695c;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.auth-status a:hover { text-decoration: underline; }
+
+.auth-refresh {
+  border: none;
+  background: #e0f2f1;
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
