@@ -150,6 +150,7 @@ button.secondary { background: #e2e8f0; color: var(--ink); }
 .chart-inner {
   padding: 0 12px; /* horizontal padding for the plot area */
   box-sizing: border-box;
+  height: 100%;
 }
 
 /* --- Tables -------------------------------------------------------------- */

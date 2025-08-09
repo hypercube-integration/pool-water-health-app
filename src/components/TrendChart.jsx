@@ -39,7 +39,7 @@ export default function TrendChart({
       {/* pH */}
       <ChartCard title="pH" height={height}>
         <div className="chart-inner">
-          <ResponsiveContainer>
+          <ResponsiveContainer width="100%" height="100%">
             <LineChart data={sorted}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" padding={{ left: 5, right: 20 }} />
@@ -58,7 +58,7 @@ export default function TrendChart({
       {/* Chlorine */}
       <ChartCard title="Chlorine (ppm)" height={height}>
         <div className="chart-inner">
-          <ResponsiveContainer>
+          <ResponsiveContainer width="100%" height="100%">
             <LineChart data={sorted}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" padding={{ left: 5, right: 20 }} />
@@ -77,7 +77,7 @@ export default function TrendChart({
       {/* Salt */}
       <ChartCard title="Salt (ppm)" height={height}>
         <div className="chart-inner">
-          <ResponsiveContainer>
+          <ResponsiveContainer width="100%" height="100%">
             <LineChart data={sorted}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" padding={{ left: 5, right: 20 }} />
