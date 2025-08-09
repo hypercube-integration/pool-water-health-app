@@ -41,33 +41,48 @@ export function downloadText(filename, text, mime = 'text/plain;charset=utf-8') 
   URL.revokeObjectURL(url);
 }
 
-/** Try to export to .xlsx using 'xlsx' if available. */
-export async function exportXlsx(filename, rows, sheetName = 'Readings') {
-  try {
-    const XLSX = (await import('xlsx')).default || (await import('xlsx'));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
-    const wbout = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-    const blob = new Blob([wbout], {
-      type:
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename.endsWith('.xlsx') ? filename : filename + '.xlsx';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  } catch (err) {
-    console.warn(
-      'xlsx package not found. Install with: npm i xlsx',
-      err?.message || err
-    );
-    throw new Error(
-      "Excel export requires the 'xlsx' package. Run: npm i xlsx"
-    );
+/**
+ * Lazy-load SheetJS (xlsx) only when needed.
+ * - First tries window.XLSX (already loaded).
+ * - Otherwise injects CDN script and resolves when ready.
+ */
+async function loadXlsxFromCdn() {
+  if (typeof window !== 'undefined' && window.XLSX) return window.XLSX;
+
+  const CDN_URL = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = CDN_URL;
+    s.async = true;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Failed to load SheetJS from CDN'));
+    document.head.appendChild(s);
+  });
+
+  if (!window.XLSX) {
+    throw new Error('SheetJS failed to initialize.');
   }
+  return window.XLSX;
+}
+
+/** Export to .xlsx using SheetJS loaded from CDN at runtime (no bundler dep). */
+export async function exportXlsx(filename, rows, sheetName = 'Readings') {
+  const XLSX = await loadXlsxFromCdn();
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  const wbout = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+  const blob = new Blob([wbout], {
+    type:
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename.endsWith('.xlsx') ? filename : filename + '.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
