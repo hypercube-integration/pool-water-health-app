@@ -28,11 +28,13 @@ export default function TrendChart({
   targetBands = {
     ph: [7.2, 7.6],
     chlorine: [1.0, 3.0],
-    salt: [3000, 4500], // adjust to your pool’s target if needed
+    salt: [3000, 4500],
   },
 }) {
-  // Ascending for nicer L→R time flow
-  const sorted = [...data].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  // Ascending sort by date
+  const sorted = [...data].sort((a, b) =>
+    a.date < b.date ? -1 : a.date > b.date ? 1 : 0
+  );
 
   return (
     <div className="trend-chart" style={{ display: 'grid', gap: 12 }}>
@@ -47,9 +49,21 @@ export default function TrendChart({
               <Tooltip />
               <Legend />
               {Array.isArray(targetBands?.ph) && (
-                <ReferenceArea y1={targetBands.ph[0]} y2={targetBands.ph[1]} />
+                <ReferenceArea
+                  y1={targetBands.ph[0]}
+                  y2={targetBands.ph[1]}
+                  fill="#f97316"       // Orange for pH
+                  fillOpacity={0.15}
+                  stroke="none"
+                />
               )}
-              <Line type="monotone" dataKey="ph" dot name="pH" />
+              <Line
+                type="monotone"
+                dataKey="ph"
+                stroke="#f97316"
+                dot
+                name="pH"
+              />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -62,13 +76,25 @@ export default function TrendChart({
             <LineChart data={sorted}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" padding={{ left: 5, right: 20 }} />
-              <YAxis />
+              <YAxis domain={[0, 5]} />
               <Tooltip />
               <Legend />
               {Array.isArray(targetBands?.chlorine) && (
-                <ReferenceArea y1={targetBands.chlorine[0]} y2={targetBands.chlorine[1]} />
+                <ReferenceArea
+                  y1={targetBands.chlorine[0]}
+                  y2={targetBands.chlorine[1]}
+                  fill="#16a34a"       // Green for Chlorine
+                  fillOpacity={0.15}
+                  stroke="none"
+                />
               )}
-              <Line type="monotone" dataKey="chlorine" dot name="Chlorine" />
+              <Line
+                type="monotone"
+                dataKey="chlorine"
+                stroke="#16a34a"
+                dot
+                name="Chlorine"
+              />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -81,13 +107,25 @@ export default function TrendChart({
             <LineChart data={sorted}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" padding={{ left: 5, right: 20 }} />
-              <YAxis />
+              <YAxis domain={[2000, 5000]} />
               <Tooltip />
               <Legend />
               {Array.isArray(targetBands?.salt) && (
-                <ReferenceArea y1={targetBands.salt[0]} y2={targetBands.salt[1]} />
+                <ReferenceArea
+                  y1={targetBands.salt[0]}
+                  y2={targetBands.salt[1]}
+                  fill="#3b82f6"       // Blue for Salt
+                  fillOpacity={0.15}
+                  stroke="none"
+                />
               )}
-              <Line type="monotone" dataKey="salt" dot name="Salt" />
+              <Line
+                type="monotone"
+                dataKey="salt"
+                stroke="#3b82f6"
+                dot
+                name="Salt"
+              />
             </LineChart>
           </ResponsiveContainer>
         </div>
