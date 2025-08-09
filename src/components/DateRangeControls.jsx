@@ -9,23 +9,41 @@ const daysAgo = (n) => {
 };
 
 export default function DateRangeControls({ value, onChange }) {
+  // Local state
   const [startDate, setStartDate] = useState(value?.startDate || fmt(daysAgo(30)));
   const [endDate, setEndDate] = useState(value?.endDate || fmt(today));
   const [preset, setPreset] = useState('30d'); // 7d | 30d | 90d | custom
 
+  // ✅ Keep local state in sync with parent prop
+  useEffect(() => {
+    const s = value?.startDate || fmt(daysAgo(30));
+    const e = value?.endDate || fmt(today);
+    setStartDate(s);
+    setEndDate(e);
+    // If the incoming range matches a known preset, select it; else custom
+    const diffDays = Math.max(0, Math.round((new Date(e) - new Date(s)) / 86400000));
+    if (diffDays === 6) setPreset('7d');
+    else if (diffDays === 29) setPreset('30d');
+    else if (diffDays === 89) setPreset('90d');
+    else setPreset('custom');
+  }, [value?.startDate, value?.endDate]);
+
+  // Update start/end when preset changes
   useEffect(() => {
     if (preset === 'custom') return;
     const map = { '7d': 7, '30d': 30, '90d': 90 };
     const n = map[preset] ?? 30;
-    setStartDate(fmt(daysAgo(n)));
-    setEndDate(fmt(today));
+    const s = fmt(daysAgo(n));
+    const e = fmt(today);
+    setStartDate(s);
+    setEndDate(e);
   }, [preset]);
 
   const apply = () => onChange?.({ startDate, endDate });
 
   return (
     <div className="date-range">
-      {/* Row 1 */}
+      {/* Row 1: Start | End */}
       <div className="card">
         <label>Start date</label>
         <input
@@ -44,7 +62,7 @@ export default function DateRangeControls({ value, onChange }) {
         />
       </div>
 
-      {/* Row 2 */}
+      {/* Row 2: Preset | Apply */}
       <div className="card">
         <label>Preset</label>
         <select value={preset} onChange={(e) => setPreset(e.target.value)}>
