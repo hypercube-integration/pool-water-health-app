@@ -1,12 +1,12 @@
 {
   "routes": [
-    { "route": "/api/submitReading", "allowedRoles": ["authenticated"] },
-    { "route": "/api/updateReading", "allowedRoles": ["authenticated"] },
-    { "route": "/api/deleteReading", "allowedRoles": ["authenticated"] },
-    { "route": "/api/exportCSV",   "allowedRoles": ["authenticated"] }
+    { "route": "/api/submitReading", "allowedRoles": ["writer", "admin"] },
+    { "route": "/api/updateReading", "allowedRoles": ["editor", "admin"] },
+    { "route": "/api/deleteReading", "allowedRoles": ["deleter", "admin"] },
+    { "route": "/api/exportCSV",     "allowedRoles": ["exporter", "admin"] }
 
-    /* If you also want to protect reads, uncomment this:
-    ,{ "route": "/api/getReadings", "allowedRoles": ["authenticated"] }
+    /* Reads can stay public or be restricted:
+    ,{ "route": "/api/getReadings",  "allowedRoles": ["authenticated", "admin"] }
     */
   ]
 }
