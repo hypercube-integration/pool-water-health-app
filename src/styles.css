@@ -167,3 +167,24 @@ button:hover {
   padding: 4px 8px;
   cursor: pointer;
 }
+
+.login-banner {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: #fff3cd;
+  border: 1px solid #ffeeba;
+  border-radius: 6px;
+  text-align: center;
+}
+.login-banner button {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  background: #00695c;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.login-banner button:hover {
+  background: #004d40;
+}

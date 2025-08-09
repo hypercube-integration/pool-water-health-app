@@ -1,132 +1,166 @@
-# 🏊 Pool Water Health App
+# 🏊 Pool Water Health App (MVP)
 
-A cloud-native React + Azure app to help monitor, track, and optimize swimming pool water quality.
-
----
-
-## ✅ Features Overview
-
-### Frontend (React + Vite)
-
-- ✅ **Responsive UI with mobile support**  
-  _Tech:_ React, CSS Media Queries, `styles.css`
-
-- ✅ **Data Entry Form (pH, Chlorine, Salt, Date)**  
-  _Tech:_ React state (`useState`, `useEffect`), controlled inputs
-
-- ✅ **Edit Existing Entry**  
-  _Tech:_ Props-based form reuse, conditional submit/cancel buttons  
-  _Note:_ In this app, `date` is the Cosmos DB **partition key**, so it cannot be changed during edits without deleting and recreating the entry. To prevent accidental loss of data, the date field is **read-only in edit mode**.
-
-- ✅ **Delete Existing Entry**  
-  _Tech:_ React event handling, Azure Function (`deleteReading`), Cosmos DB delete using item id + partition key `/date`  
-  _Note:_ The delete function requires both the `id` and the original `date` (partition key) to find the record in Cosmos DB.
-
-- ✅ **History Log (last 30 entries)**  
-  _Tech:_ Array map rendering, sorted entries, aligned action buttons with Flexbox
-
-- ✅ **Trend Charts for pH, Chlorine, and Salt**  
-  _Tech:_ Recharts (`LineChart`, `ReferenceArea`, `ResponsiveContainer`)
-
-- ✅ **CSV Export of Readings**  
-  _Tech:_ Blob + Anchor download, Azure Function (`exportCSV`)
+This is the **Pool Water Health** MVP web app, built entirely using **free-tier Azure components** and deployed via **Azure Static Web Apps**.  
+It allows users to track **daily chlorine and pH readings**, view trends, edit/delete entries, download CSV logs, and (now) requires sign-in to modify data.
 
 ---
 
-### Backend (Azure Functions)
+## 🚀 Features
 
-- ✅ **Submit Reading API**  
-  _Tech:_ Azure Function, Cosmos DB insert, HTTP POST
-
-- ✅ **Update Reading API**  
-  _Tech:_ Azure Function, Cosmos DB replace, HTTP PUT
-
-- ✅ **Delete Reading API**  
-  _Tech:_ Azure Function, Cosmos DB delete using item id + partition key `/date`, HTTP DELETE
-
-- ✅ **Fetch Last 30 Readings API**  
-  _Tech:_ Azure Function, Cosmos DB query, HTTP GET
-
-- ✅ **Download as CSV API**  
-  _Tech:_ Azure Function, stringified CSV, HTTP Response with headers
+✅ **Add pool readings** (chlorine & pH) via a simple form  
+✅ **Edit** and **delete** past readings  
+✅ **Download CSV** of reading history  
+✅ **Trend charts** for chlorine and pH with green target zones  
+✅ **Mobile-responsive design** with icons for data points  
+✅ **Persistent storage** via **Azure Cosmos DB (NoSQL)**  
+✅ **Serverless APIs** with **Azure Functions**  
+✅ **Secure API endpoints** — only signed-in users can add, edit, delete, or export data  
+✅ **Dynamic login banner** — hides the form when logged out and prompts sign-in  
+✅ **Styled UI** with consistent alignment of buttons and labels  
 
 ---
 
-### Data Storage
+## 🛠 Tech Stack
 
-- ✅ **Cosmos DB (NoSQL)**  
-  _Tech:_ Azure Cosmos DB for NoSQL  
-  _Use:_ Pool readings stored as JSON docs (partitioned by `/date`)
-
----
-
-### Deployment & DevOps
-
-- ✅ **Static Frontend Deployment**  
-  _Tech:_ Azure Static Web Apps + GitHub Actions CI/CD
-
-- ✅ **Serverless API Deployment**  
-  _Tech:_ Azure Functions (integrated with Static Web App)
-
-- ✅ **Environment Variable Configuration**  
-  _Tech:_ Azure App Settings (for Cosmos DB keys, database name, etc.)
+| Feature / Component          | Technology Used                                       |
+|------------------------------|-------------------------------------------------------|
+| **Frontend** UI              | React (Vite)                                          |
+| **Styling**                  | Custom CSS + responsive design 					   |
+| **Charts**                   | [Recharts](https://recharts.org/) 					   |
+| **API Hosting**              | Azure Static Web Apps Functions 					   |
+| **Database**                 | Azure Cosmos DB (NoSQL)  							   |
+| **Authentication**           | Azure Static Web Apps built-in auth (GitHub provider) |
+| **CSV Generation**           | Serverless function (`exportCSV`) 					   |
+| **Version Control**          | GitHub + GitHub Actions CI/CD 						   |
+| **Hosting**                  | Azure Static Web Apps (Free Tier) 					   |
 
 ---
 
-## 🧱 Project Structure
+## 📂 Project Structure
 
-```
-src/
-├── App.jsx
-├── pages/
-│   └── Dashboard.jsx
-├── components/
-│   ├── LogEntryForm.jsx
-│   ├── HistoryList.jsx
-│   └── TrendChart.jsx
-├── styles.css
-
-api/
-├── getReadings/
-│   └── index.js, function.json
-├── submitReading/
-│   └── index.js, function.json
-├── updateReading/
-│   └── index.js, function.json
-├── deleteReading/
-│   └── index.js, function.json
-├── exportCSV/
-│   └── index.js, function.json
-```
-
----
-
-## 💸 Tech Stack (Free Tier Only)
-
-| Layer         | Service                   | Tier Used     |
-|---------------|----------------------------|---------------|
-| Frontend      | Azure Static Web Apps      | Free          |
-| Backend APIs  | Azure Functions            | Free          |
-| Database      | Azure Cosmos DB for NoSQL  | Free (limited)|
-| CI/CD         | GitHub Actions             | Free          |
-| Framework     | React (Vite)               | Open Source   |
-| Charting      | Recharts                   | Open Source   |
+\`\`\`
+pool-water-health-app/
+├── api/                     # Azure Functions API
+│   ├── submitReading/
+│   │   ├── index.js
+│   │   └── function.json
+│   ├── getReadings/
+│   │   ├── index.js
+│   │   └── function.json
+│   ├── updateReading/
+│   │   ├── index.js
+│   │   └── function.json
+│   ├── deleteReading/
+│   │   ├── index.js
+│   │   └── function.json
+│   └── exportCSV/
+│       ├── index.js
+│       └── function.json
+├── src/
+│   ├── pages/
+│   │   ├── Dashboard.jsx
+│   │   ├── HistoryList.jsx
+│   │   └── LogEntryForm.jsx
+│   ├── components/
+│   │   └── AuthStatus.jsx
+│   ├── hooks/
+│   │   └── useAuth.js
+│   ├── styles.css
+│   └── main.jsx
+├── staticwebapp.config.json
+├── package.json
+└── README.md
+\`\`\`
 
 ---
 
-## 🚀 Status
+## 🔐 Authentication & API Security
 
-This MVP is **live and functional**, supporting all CRUD operations (Create, Read, Update, Delete), and will soon support **Authentication** for API security.
+### How It Works
+- **Azure Static Web Apps** handles authentication with providers (e.g., GitHub).  
+- The `staticwebapp.config.json` file restricts write endpoints (`submitReading`, `updateReading`, `deleteReading`, `exportCSV`) to authenticated users only.
+- When unauthenticated users try to call these APIs directly, the server returns **401 Unauthorized** (no more 302 redirects).
+- The frontend checks `/​.auth/me` to detect whether a user is signed in.
+
+### New Behaviour (Post `useAuth()` Update)
+- When logged out:
+  - The "Add Reading" form is **hidden**.
+  - A **yellow banner** appears prompting the user to sign in.
+  - Clicking **Sign in with GitHub** redirects to Azure SWA auth flow.
+- When logged in:
+  - Full form access is available for adding and editing readings.
+- If a session expires mid-edit or mid-delete, the UI detects the **401** and redirects to sign-in.
 
 ---
 
-## 🔒 Upcoming Features
+## 🗑 Delete Functionality
 
-- [ ] 🔐 API key or login-based authentication  
-- [ ] 📱 PWA support for offline use  
-- [ ] 📊 Weekly chemical adjustment recommendations  
-- [ ] 📅 Date range filtering for readings display  
+- Each reading in the **History List** has a red **Delete** button.
+- Clicking it prompts confirmation, then calls the `deleteReading` API with both `id` and `date` parameters.
+- **Why is `date` read-only on edits?**
+  - Because `date` is part of the **Cosmos DB partition key**, changing it would require creating a new record instead of updating in place. This ensures performance and data integrity.
 
 ---
 
-Made with ❤️ and chlorine 🧪
+## ⚙ Environment Variables (Azure Functions)
+
+Set these in your Azure Function App **Configuration**:
+
+| Name           | Value (example)                                      |
+|----------------|------------------------------------------------------|
+| COSMOS_DB_CONN | (Primary Connection String from Cosmos DB Keys tab)  |
+| COSMOS_DB_NAME | `PoolWaterHealth`                                    |
+| COSMOS_COL     | `Readings`                                           |
+
+---
+
+## 📊 Trend Charts
+
+- Uses **Recharts** for pH and Chlorine trend lines.
+- Green shaded band indicates target range.
+- Y-axis labels aligned to avoid cutoff.
+- Responsive design for desktop and mobile.
+
+---
+
+## 📥 CSV Export
+
+- CSV generated by the `exportCSV` Azure Function.
+- Requires authentication.
+- Triggered by clicking **Download CSV**.
+- Browser auto-downloads `pool_readings.csv`.
+
+---
+
+## 🚀 Deployment Steps (Summary)
+
+1. Push code to **GitHub**.
+2. Azure Static Web Apps (Free Tier) auto-builds via **GitHub Actions**.
+3. APIs deployed under `/api/*` paths.
+4. Protected routes defined in `staticwebapp.config.json`.
+
+---
+
+## 📌 Future Roadmap
+
+- [ ] Advanced analytics (e.g., moving averages, chemical dosage suggestions).
+- [ ] Role-based permissions (admin vs. read-only users).
+- [ ] Offline mode with local cache.
+- [ ] Mobile PWA install support.
+
+---
+
+## 🧪 Testing Scenarios
+
+- ✅ Add readings (authenticated)
+- ✅ Edit readings (authenticated)
+- ✅ Delete readings (authenticated)
+- ✅ Download CSV (authenticated)
+- ✅ View readings (public)
+- 🚫 Attempt add/edit/delete/download when logged out → **Prompt to sign in**
+
+---
+
+## 💡 Credits
+
+Built with ❤️ using **React**, **Azure Static Web Apps**, **Azure Functions**, and **Azure Cosmos DB**.

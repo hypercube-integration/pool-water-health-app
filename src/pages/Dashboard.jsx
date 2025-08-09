@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import LogEntryForm from '../components/LogEntryForm';
-import HistoryList from '../components/HistoryList';
-import TrendChart from '../components/TrendChart';
+import LogEntryForm from './LogEntryForm';
+import HistoryList from './HistoryList';
+import TrendChart from './TrendChart';
 import AuthStatus from '../components/AuthStatus';
+import useAuth from '../hooks/useAuth';
 
 export default function Dashboard() {
+  const { user, authLoading } = useAuth();
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -34,16 +36,6 @@ export default function Dashboard() {
     }
   };
 
-  const getMe = async () => {
-    try {
-      const res = await fetch('/.auth/me', { credentials: 'include' });
-      const data = await res.json().catch(() => ({}));
-      return data?.clientPrincipal || null;
-    } catch {
-      return null;
-    }
-  };
-
   const redirectToLogin = () => {
     window.location.href = '/.auth/login/github?post_login_redirect_uri=/';
   };
@@ -52,9 +44,7 @@ export default function Dashboard() {
     setLoading(true);
     setError(null);
 
-    // Pre-check auth so we don't even call the API when logged out
-    const me = await getMe();
-    if (!me) {
+    if (!user) {
       setLoading(false);
       alert('Please sign in to add or edit a reading.');
       redirectToLogin();
@@ -70,7 +60,6 @@ export default function Dashboard() {
         body: JSON.stringify(entry),
       });
 
-      // Explicitly handle 401 (unauthenticated)
       if (res.status === 401) {
         setLoading(false);
         alert('Please sign in to add or edit a reading.');
@@ -160,11 +149,20 @@ export default function Dashboard() {
       <AuthStatus />
       <h1>🏊 Pool Water Health Dashboard</h1>
 
-      <LogEntryForm
-        onSubmit={handleSubmit}
-        initialValues={editEntry}
-        onCancelEdit={() => setEditEntry(null)}
-      />
+      {authLoading ? (
+        <p>🔍 Checking sign-in status...</p>
+      ) : user ? (
+        <LogEntryForm
+          onSubmit={handleSubmit}
+          initialValues={editEntry}
+          onCancelEdit={() => setEditEntry(null)}
+        />
+      ) : (
+        <div className="login-banner">
+          <p>🔐 Please sign in to add, edit, or delete readings.</p>
+          <button onClick={redirectToLogin}>Sign in with GitHub</button>
+        </div>
+      )}
 
       {error && <div className="error">⚠️ {error}</div>}
       {loading && <div>⏳ Loading...</div>}
