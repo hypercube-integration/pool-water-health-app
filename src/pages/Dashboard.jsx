@@ -19,7 +19,7 @@ export default function Dashboard() {
   const fmt = (d) => d.toISOString().slice(0, 10);
   const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d; };
   const asISO = (s) =>
-    s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : new Date(s).toISOString().slice(0, 10));
+    s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : new Date(s).toISOString().slice(0, 10);
 
   // --- Date range state -----------------------------------------------------
   const [range, setRange] = useState({
