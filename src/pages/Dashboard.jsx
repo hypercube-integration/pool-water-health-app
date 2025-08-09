@@ -19,7 +19,7 @@ export default function Dashboard() {
   const fmt = (d) => d.toISOString().slice(0, 10);
   const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d; };
   const asISO = (s) =>
-    s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : new Date(s).toISOString().slice(0, 10);
+    s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : new Date(s).toISOString().slice(0, 10));
 
   // --- Date range state -----------------------------------------------------
   const [range, setRange] = useState({
@@ -133,14 +133,51 @@ export default function Dashboard() {
     }
   };
 
-  // NEW: Server-side CSV export using /api/exportCSV
+  // Server-side CSV export using /api/exportCSV
   const doServerCsv = () => {
     const params = new URLSearchParams();
     if (range.startDate) params.set('startDate', range.startDate);
     if (range.endDate) params.set('endDate', range.endDate);
     params.set('limit', '20000'); // optional: lift the cap for large exports
-    // Redirect the browser to the API which will stream the CSV
     window.location.href = `/api/exportCSV?${params.toString()}`;
+  };
+
+  // --- Edit flow ------------------------------------------------------------
+  const [editing, setEditing] = useState(null); // null or a reading object
+
+  const handleEdit = (reading) => {
+    setEditing(reading);
+    // Scroll to form (handy on small screens)
+    setTimeout(() => {
+      const el = document.getElementById('log-entry-form');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  };
+
+  const handleSaved = async () => {
+    setEditing(null);
+    await fetchReadings(range);
+  };
+
+  const handleCancel = () => {
+    setEditing(null);
+  };
+
+  const handleDelete = async (r) => {
+    const ok = window.confirm(`Delete reading for ${r.date}?`);
+    if (!ok) return;
+    const params = new URLSearchParams();
+    if (r.id) params.set('id', r.id);
+    params.set('date', r.date);
+    const res = await fetch(`/api/deleteReading?${params.toString()}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      alert('Delete failed.');
+      return;
+    }
+    await fetchReadings(range);
   };
 
   return (
@@ -188,9 +225,9 @@ export default function Dashboard() {
       {canWrite && (
         <div className="section" id="log-entry-form">
           <LogEntryForm
-            initialValue={null}
-            onSaved={() => fetchReadings(range)}
-            onCancel={() => {}}
+            initialValue={editing}     // <-- edit mode when not null
+            onSaved={handleSaved}
+            onCancel={handleCancel}
           />
         </div>
       )}
@@ -199,26 +236,8 @@ export default function Dashboard() {
         <HistoryList
           readings={readings}
           canEdit={canWrite}
-          onEdit={(r) => {
-            // If you switch to in-place editing, wire your form here.
-            // setEditing(r)
-          }}
-          onDelete={async (r) => {
-            const ok = window.confirm(`Delete reading for ${r.date}?`);
-            if (!ok) return;
-            const params = new URLSearchParams();
-            if (r.id) params.set('id', r.id);
-            params.set('date', r.date);
-            const res = await fetch(`/api/deleteReading?${params.toString()}`, {
-              method: 'DELETE',
-              credentials: 'include',
-            });
-            if (!res.ok) {
-              alert('Delete failed.');
-              return;
-            }
-            await fetchReadings(range);
-          }}
+          onEdit={handleEdit}        // <-- wire up Edit
+          onDelete={handleDelete}
         />
       </div>
     </div>
