@@ -1,59 +1,113 @@
-import React from 'react';
+// src/components/TrendChart.jsx
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceArea,
+  Legend,
 } from 'recharts';
 
-export default function TrendChart({ entries }) {
-  if (!entries || entries.length === 0) return null;
-
-  const formatData = (key) =>
-    entries.map((entry) => ({
-      date: entry.date,
-      value: parseFloat(entry[key]),
-    }));
-
-  const ChartSection = ({ title, data, lower, upper, unit }) => (
-    <div style={{ width: '100%', height: 300, marginBottom: '40px' }}>
-      <h3 style={{ textAlign: 'center', marginBottom: 10 }}>{title}</h3>
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 10, right: 20, bottom: 20, left: 30 }}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="date" />
-          <YAxis domain={['auto', 'auto']} tickFormatter={(val) => `${val}${unit || ''}`} />
-          <Tooltip />
-          <Line type="monotone" dataKey="value" stroke="#00bcd4" strokeWidth={2} dot={{ r: 3 }} />
-          <ReferenceArea y1={lower} y2={upper} fill="#c8e6c9" stroke="none" />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
+/**
+ * TrendChart
+ * Props:
+ *  - data: Array<{ date: string, ph?: number, chlorine?: number, salt?: number }>
+ *  - height?: number (default 280)
+ *  - targetBands?: {
+ *      ph?: [number, number],
+ *      chlorine?: [number, number],
+ *      salt?: [number, number]
+ *    }
+ *
+ * Renders three time-series charts (pH, Chlorine, Salt) using the given `data`.
+ * If a band is not provided, a sensible default is used for that metric.
+ */
+export default function TrendChart({
+  data = [],
+  height = 280,
+  targetBands = {
+    ph: [7.2, 7.6],
+    chlorine: [1.0, 3.0],
+    salt: [3000, 4500], // ppm (adjust if your pool's target differs)
+  },
+}) {
+  // Defensive copy to ensure ascending order for nicer L→R reading
+  const sorted = [...data].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
   return (
-    <div style={{ marginTop: '40px' }}>
-      <h2 style={{ textAlign: 'center' }}>📈 Trend</h2>
+    <div className="trend-chart" style={{ display: 'grid', gap: 12 }}>
+      {/* pH */}
+      <ChartCard title="pH" height={height}>
+        <ResponsiveContainer>
+          <LineChart data={sorted}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis domain={[6.8, 8.2]} />
+            <Tooltip />
+            <Legend />
+            {Array.isArray(targetBands?.ph) && (
+              <ReferenceArea y1={targetBands.ph[0]} y2={targetBands.ph[1]} />
+            )}
+            <Line type="monotone" dataKey="ph" dot name="pH" />
+          </LineChart>
+        </ResponsiveContainer>
+      </ChartCard>
 
-      <ChartSection
-        title="pH Trend"
-        data={formatData('ph')}
-        lower={7.2}
-        upper={7.6}
-      />
+      {/* Chlorine */}
+      <ChartCard title="Chlorine (ppm)" height={height}>
+        <ResponsiveContainer>
+          <LineChart data={sorted}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            {Array.isArray(targetBands?.chlorine) && (
+              <ReferenceArea y1={targetBands.chlorine[0]} y2={targetBands.chlorine[1]} />
+            )}
+            <Line type="monotone" dataKey="chlorine" dot name="Chlorine" />
+          </LineChart>
+        </ResponsiveContainer>
+      </ChartCard>
 
-      <ChartSection
-        title="Chlorine Trend"
-        data={formatData('chlorine')}
-        lower={1}
-        upper={3}
-        unit=" ppm"
-      />
-
-      <ChartSection
-        title="Salt Trend"
-        data={formatData('salt')}
-        lower={2500}
-        upper={4000}
-        unit=" ppm"
-      />
+      {/* Salt */}
+      <ChartCard title="Salt (ppm)" height={height}>
+        <ResponsiveContainer>
+          <LineChart data={sorted}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            {Array.isArray(targetBands?.salt) && (
+              <ReferenceArea y1={targetBands.salt[0]} y2={targetBands.salt[1]} />
+            )}
+            <Line type="monotone" dataKey="salt" dot name="Salt" />
+          </LineChart>
+        </ResponsiveContainer>
+      </ChartCard>
     </div>
+  );
+}
+
+function ChartCard({ title, height, children }) {
+  return (
+    <section style={{ margin: '8px 0' }}>
+      <h3 style={{ margin: '6px 0' }}>{title}</h3>
+      <div
+        style={{
+          width: '100%',
+          height,
+          background: 'rgba(0,0,0,0.02)',
+          borderRadius: 8,
+          padding: 8,
+        }}
+      >
+        {children}
+      </div>
+    </section>
   );
 }

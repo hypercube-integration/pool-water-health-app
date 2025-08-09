@@ -1,48 +1,51 @@
-const { CosmosClient } = require("@azure/cosmos");
+// api/getReadings/index.js
+const { CosmosClient } = require('@azure/cosmos');
+const COSMOS_CONNECTION_STRING = process.env.COSMOS_CONNECTION_STRING;
+const DB = 'PoolAppDB';
+const CONTAINER = 'Readings';
 
 module.exports = async function (context, req) {
   try {
-    const limit = Math.min(
-      parseInt(req.query.limit || "50", 10) || 50,
-      500 // hard cap
-    );
-    const startDate = req.query.startDate; // YYYY-MM-DD
-    const endDate = req.query.endDate;     // YYYY-MM-DD
-
-    if (!process.env.COSMOS_CONNECTION_STRING) {
-      throw new Error("COSMOS_CONNECTION_STRING is missing");
+    if (!COSMOS_CONNECTION_STRING) {
+      context.res = { status: 500, body: { error: 'Missing COSMOS_CONNECTION_STRING' } };
+      return;
     }
 
-    const client = new CosmosClient(process.env.COSMOS_CONNECTION_STRING);
-    const database = client.database("PoolAppDB");
-    const container = database.container("Readings");
+    const limit = Math.max(1, Math.min(parseInt(req.query.limit || '30', 10) || 30, 365));
+    const startDate = (req.query.startDate || '').trim();
+    const endDate = (req.query.endDate || '').trim();
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
 
-    // Build SQL with optional date filters
     const where = [];
-    const params = [{ name: "@limit", value: limit }];
+    const params = [{ name: '@limit', value: limit }];
 
-    if (startDate) {
-      where.push("c.date >= @startDate");
-      params.push({ name: "@startDate", value: startDate });
+    if (startDate && dateRe.test(startDate)) {
+      where.push('c.date >= @start');
+      params.push({ name: '@start', value: startDate });
     }
-    if (endDate) {
-      where.push("c.date <= @endDate");
-      params.push({ name: "@endDate", value: endDate });
+    if (endDate && dateRe.test(endDate)) {
+      where.push('c.date <= @end');
+      params.push({ name: '@end', value: endDate });
     }
 
-    const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const sql = `
+      SELECT TOP @limit c.id, c.date, c.ph, c.chlorine, c.salt
+      FROM c
+      ${whereSql}
+      ORDER BY c.date DESC
+    `.trim();
 
-    const querySpec = {
-      query: `SELECT TOP @limit * FROM c ${whereClause} ORDER BY c.date DESC`,
-      parameters: params
-    };
+    const client = new CosmosClient(COSMOS_CONNECTION_STRING);
+    const container = client.database(DB).container(CONTAINER);
 
-    const { resources: items } = await container.items
-      .query(querySpec, { enableCrossPartitionQuery: true })
+    const { resources } = await container.items
+      .query({ query: sql, parameters: params }, { enableCrossPartition: true, maxItemCount: limit })
       .fetchAll();
 
-    context.res = { status: 200, body: items };
-  } catch (error) {
-    context.res = { status: 500, body: { error: error.message } };
+    context.res = { headers: { 'content-type': 'application/json' }, body: resources };
+  } catch (err) {
+    context.log.error(err);
+    context.res = { status: 500, body: { error: 'Server error', details: String(err) } };
   }
 };

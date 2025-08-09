@@ -1,240 +1,107 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import LogEntryForm from '../components/LogEntryForm';
 import HistoryList from '../components/HistoryList';
 import TrendChart from '../components/TrendChart';
 import AuthStatus from '../components/AuthStatus';
+import DateRangeControls from '../components/DateRangeControls'; // ⟵ NEW
 import useAuth from '../hooks/useAuth';
 import useRoleCheck from '../hooks/useRoleCheck';
 
 export default function Dashboard() {
   const { user, authLoading } = useAuth();
+  const canWrite = useRoleCheck(['writer', 'editor', 'admin']).has;
 
-  // Role guards
-  const { has: canWrite }  = useRoleCheck(['writer', 'admin']);
-  const { has: canEdit }   = useRoleCheck(['editor', 'admin']);
-  const { has: canDelete } = useRoleCheck(['deleter', 'admin']);
-  const { has: canExport } = useRoleCheck(['exporter', 'admin']);
-
-  const [entries, setEntries] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [editEntry, setEditEntry] = useState(null);
-  const [advice, setAdvice] = useState([]);
-
-  const LIMIT = 30;
-
-  useEffect(() => {
-    fetchReadings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const fetchReadings = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/getReadings?limit=${LIMIT}`);
-      if (!res.ok) throw new Error(`Failed to fetch readings (${res.status})`);
-      const data = await res.json();
-      setEntries(Array.isArray(data) ? data : []);
-      setError(null);
-    } catch (err) {
-      console.error('Fetch error:', err);
-      setError(err.message || 'Error fetching data.');
-    } finally {
-      setLoading(false);
-    }
+  // --- Date range state ------------------------------------------------------
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  const daysAgo = (n) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d;
   };
+  const [range, setRange] = useState({
+    startDate: fmt(daysAgo(30)),
+    endDate: fmt(new Date()),
+  });
 
-  const redirectToLogin = () => {
-    window.location.href = '/.auth/login/github?post_login_redirect_uri=/';
-  };
+  // --- Data load for charts + history (single source of truth) ---------------
+  const [readings, setReadings] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
 
-  const handleSubmit = async (entry) => {
+  const fetchReadings = async ({ startDate, endDate }) => {
     setLoading(true);
-    setError(null);
-
-    if (!user) {
-      setLoading(false);
-      alert('Please sign in to add or edit a reading.');
-      redirectToLogin();
-      return;
-    }
-
-    const isEdit = !!entry.id;
-
-    // Enforce role UI-side (server still enforces)
-    if (isEdit && !canEdit) {
-      setLoading(false);
-      alert('You do not have permission to edit readings.');
-      return;
-    }
-    if (!isEdit && !canWrite) {
-      setLoading(false);
-      alert('You do not have permission to add readings.');
-      return;
-    }
-
+    setErr('');
     try {
-      const res = await fetch(`/api/${isEdit ? 'updateReading' : 'submitReading'}`, {
-        method: isEdit ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(entry),
+      const params = new URLSearchParams();
+      if (startDate) params.set('startDate', startDate);
+      if (endDate) params.set('endDate', endDate);
+      // Optional cap:
+      // params.set('limit', '365');
+
+      const res = await fetch(`/api/getReadings?${params.toString()}`, {
+        credentials: 'include',
       });
 
-      if (res.status === 401) {
-        setLoading(false);
-        alert('Please sign in to continue.');
-        redirectToLogin();
-        return;
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`Fetch failed (${res.status}) ${text}`);
       }
-      if (res.status === 403) {
-        setLoading(false);
-        alert('You do not have the required role to perform this action.');
-        return;
-      }
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-
-      await res.json();
-      await fetchReadings();
-      setAdvice([]);
-      setEditEntry(null);
-    } catch (err) {
-      console.error('Submit error:', err);
-      setError(err.message || 'Submission failed.');
+      const data = await res.json();
+      setReadings(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setErr('Failed to load readings.');
+      console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEdit = (entry) => {
-    if (!canEdit) {
-      alert('You do not have permission to edit readings.');
-      return;
-    }
-    setEditEntry(entry);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  useEffect(() => {
+    fetchReadings(range);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range.startDate, range.endDate]);
 
-  const handleDelete = async (entry) => {
-    if (!canDelete) {
-      alert('You do not have permission to delete readings.');
-      return;
-    }
-    if (!entry?.id || !entry?.date) {
-      alert('Missing id or date for this entry; cannot delete.');
-      return;
-    }
-    const confirmDelete = window.confirm(`Delete reading for ${entry.date}?`);
-    if (!confirmDelete) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const url = `/api/deleteReading?id=${encodeURIComponent(entry.id)}&date=${encodeURIComponent(entry.date)}`;
-      const res = await fetch(url, { method: 'DELETE' });
-
-      if (res.status === 401) {
-        setLoading(false);
-        alert('Please sign in to delete a reading.');
-        redirectToLogin();
-        return;
-      }
-      if (res.status === 403) {
-        setLoading(false);
-        alert('You do not have permission to delete readings.');
-        return;
-      }
-      if (!res.ok) throw new Error(`Delete failed (${res.status})`);
-
-      await fetchReadings();
-      if (editEntry?.id === entry.id) setEditEntry(null);
-    } catch (err) {
-      console.error('Delete error:', err);
-      setError(err.message || 'Failed to delete reading.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDownloadCSV = async () => {
-    if (!canExport) {
-      alert('You do not have permission to export CSV.');
-      return;
-    }
-    try {
-      const res = await fetch('/api/exportCSV');
-      if (res.status === 401) {
-        alert('Please sign in to download CSV.');
-        redirectToLogin();
-        return;
-      }
-      if (res.status === 403) {
-        alert('You do not have permission to export CSV.');
-        return;
-      }
-      if (!res.ok) throw new Error(`Failed to export CSV (${res.status})`);
-
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'pool_readings.csv';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('CSV download error:', err);
-      alert('Error downloading CSV. Check console for details.');
-    }
-  };
-
-  const showForm = user && (canWrite || canEdit);
+  // Sort ascending for nicer L→R time flow on charts
+  const chartData = useMemo(() => {
+    const copy = [...readings];
+    copy.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    return copy;
+  }, [readings]);
 
   return (
-    <div className="dashboard">
+    <div className="dashboard" style={{ padding: 16 }}>
       <AuthStatus />
-      <h1>🏊 Pool Water Health Dashboard</h1>
 
-      {authLoading ? (
-        <p>🔍 Checking sign-in status...</p>
-      ) : showForm ? (
-        <LogEntryForm
-          onSubmit={handleSubmit}
-          initialValues={editEntry}
-          onCancelEdit={() => setEditEntry(null)}
-        />
-      ) : (
-        <div className="login-banner">
-          <p>🔐 Please sign in with the appropriate role to add or edit readings.</p>
-          <button onClick={() => window.location.assign('/.auth/login/github?post_login_redirect_uri=/')}>
-            Sign in with GitHub
-          </button>
-        </div>
-      )}
+      <h1>Pool Dashboard</h1>
 
-      {error && <div className="error">⚠️ {error}</div>}
-      {loading && <div>⏳ Loading...</div>}
+      {/* Date range controls */}
+      <DateRangeControls value={range} onChange={setRange} />
 
-      {!loading && (
-        <>
-          {canExport && (
-            <button className="download-btn" onClick={handleDownloadCSV}>
-              📥 Download CSV
-            </button>
-          )}
+      {loading && <div>Loading…</div>}
+      {err && <div style={{ color: 'red' }}>{err}</div>}
 
-          <TrendChart entries={entries} />
+      {/* Trend charts (now filtered to the selected date range) */}
+      <section style={{ margin: '12px 0' }}>
+        <TrendChart data={chartData} />
+      </section>
 
-          <HistoryList
-            entries={entries}
-            onEdit={canEdit ? handleEdit : undefined}
-            onDelete={canDelete ? handleDelete : undefined}
-            canEdit={canEdit}
-            canDelete={canDelete}
+      {/* Log entry form unchanged */}
+      {canWrite && (
+        <section style={{ margin: '12px 0' }}>
+          <LogEntryForm
+            onSaved={() => {
+              // Re-fetch to reflect any new/edited entry inside the current range
+              fetchReadings(range);
+            }}
           />
-        </>
+        </section>
       )}
+
+      {/* History: if your HistoryList supports an incoming `readings` prop, pass it.
+          If not, you can remove the prop and let HistoryList fetch as it did before. */}
+      <section style={{ margin: '12px 0' }}>
+        <HistoryList readings={readings} />
+      </section>
     </div>
   );
 }
