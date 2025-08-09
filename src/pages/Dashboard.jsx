@@ -4,9 +4,17 @@ import HistoryList from '../components/HistoryList';
 import TrendChart from '../components/TrendChart';
 import AuthStatus from '../components/AuthStatus';
 import useAuth from '../hooks/useAuth';
+import useRoleCheck from '../hooks/useRoleCheck';
 
 export default function Dashboard() {
   const { user, authLoading } = useAuth();
+
+  // Role guards
+  const { has: canWrite }  = useRoleCheck(['writer', 'admin']);
+  const { has: canEdit }   = useRoleCheck(['editor', 'admin']);
+  const { has: canDelete } = useRoleCheck(['deleter', 'admin']);
+  const { has: canExport } = useRoleCheck(['exporter', 'admin']);
+
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -53,6 +61,18 @@ export default function Dashboard() {
 
     const isEdit = !!entry.id;
 
+    // Enforce role UI-side (server still enforces)
+    if (isEdit && !canEdit) {
+      setLoading(false);
+      alert('You do not have permission to edit readings.');
+      return;
+    }
+    if (!isEdit && !canWrite) {
+      setLoading(false);
+      alert('You do not have permission to add readings.');
+      return;
+    }
+
     try {
       const res = await fetch(`/api/${isEdit ? 'updateReading' : 'submitReading'}`, {
         method: isEdit ? 'PUT' : 'POST',
@@ -62,14 +82,18 @@ export default function Dashboard() {
 
       if (res.status === 401) {
         setLoading(false);
-        alert('Please sign in to add or edit a reading.');
+        alert('Please sign in to continue.');
         redirectToLogin();
         return;
       }
-
+      if (res.status === 403) {
+        setLoading(false);
+        alert('You do not have the required role to perform this action.');
+        return;
+      }
       if (!res.ok) throw new Error(`API error: ${res.status}`);
-      await res.json();
 
+      await res.json();
       await fetchReadings();
       setAdvice([]);
       setEditEntry(null);
@@ -82,11 +106,19 @@ export default function Dashboard() {
   };
 
   const handleEdit = (entry) => {
+    if (!canEdit) {
+      alert('You do not have permission to edit readings.');
+      return;
+    }
     setEditEntry(entry);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDelete = async (entry) => {
+    if (!canDelete) {
+      alert('You do not have permission to delete readings.');
+      return;
+    }
     if (!entry?.id || !entry?.date) {
       alert('Missing id or date for this entry; cannot delete.');
       return;
@@ -107,8 +139,13 @@ export default function Dashboard() {
         redirectToLogin();
         return;
       }
-
+      if (res.status === 403) {
+        setLoading(false);
+        alert('You do not have permission to delete readings.');
+        return;
+      }
       if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+
       await fetchReadings();
       if (editEntry?.id === entry.id) setEditEntry(null);
     } catch (err) {
@@ -120,11 +157,19 @@ export default function Dashboard() {
   };
 
   const handleDownloadCSV = async () => {
+    if (!canExport) {
+      alert('You do not have permission to export CSV.');
+      return;
+    }
     try {
       const res = await fetch('/api/exportCSV');
       if (res.status === 401) {
         alert('Please sign in to download CSV.');
         redirectToLogin();
+        return;
+      }
+      if (res.status === 403) {
+        alert('You do not have permission to export CSV.');
         return;
       }
       if (!res.ok) throw new Error(`Failed to export CSV (${res.status})`);
@@ -144,6 +189,8 @@ export default function Dashboard() {
     }
   };
 
+  const showForm = user && (canWrite || canEdit);
+
   return (
     <div className="dashboard">
       <AuthStatus />
@@ -151,7 +198,7 @@ export default function Dashboard() {
 
       {authLoading ? (
         <p>🔍 Checking sign-in status...</p>
-      ) : user ? (
+      ) : showForm ? (
         <LogEntryForm
           onSubmit={handleSubmit}
           initialValues={editEntry}
@@ -159,8 +206,10 @@ export default function Dashboard() {
         />
       ) : (
         <div className="login-banner">
-          <p>🔐 Please sign in to add, edit, or delete readings.</p>
-          <button onClick={redirectToLogin}>Sign in with GitHub</button>
+          <p>🔐 Please sign in with the appropriate role to add or edit readings.</p>
+          <button onClick={() => window.location.assign('/.auth/login/github?post_login_redirect_uri=/')}>
+            Sign in with GitHub
+          </button>
         </div>
       )}
 
@@ -169,16 +218,20 @@ export default function Dashboard() {
 
       {!loading && (
         <>
-          <button className="download-btn" onClick={handleDownloadCSV}>
-            📥 Download CSV
-          </button>
+          {canExport && (
+            <button className="download-btn" onClick={handleDownloadCSV}>
+              📥 Download CSV
+            </button>
+          )}
 
           <TrendChart entries={entries} />
 
           <HistoryList
             entries={entries}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
+            onEdit={canEdit ? handleEdit : undefined}
+            onDelete={canDelete ? handleDelete : undefined}
+            canEdit={canEdit}
+            canDelete={canDelete}
           />
         </>
       )}

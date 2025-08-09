@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function HistoryList({ entries, onEdit, onDelete }) {
+export default function HistoryList({ entries, onEdit, onDelete, canEdit = false, canDelete = false }) {
   if (!entries || entries.length === 0) {
     return (
       <div className="history-list">
@@ -24,25 +24,29 @@ export default function HistoryList({ entries, onEdit, onDelete }) {
           </span>
 
           <div className="entry-actions">
-            <button
-              className="edit-btn"
-              type="button"
-              onClick={() => onEdit && onEdit(entry)}
-              aria-label={`Edit reading for ${entry.date}`}
-              title="Edit"
-            >
-              ✏️ Edit
-            </button>
+            {canEdit && (
+              <button
+                className="edit-btn"
+                type="button"
+                onClick={() => onEdit && onEdit(entry)}
+                aria-label={`Edit reading for ${entry.date}`}
+                title="Edit"
+              >
+                ✏️ Edit
+              </button>
+            )}
 
-            <button
-              className="delete-btn"
-              type="button"
-              onClick={() => onDelete && onDelete(entry)}
-              aria-label={`Delete reading for ${entry.date}`}
-              title="Delete"
-            >
-              🗑️ Delete
-            </button>
+            {canDelete && (
+              <button
+                className="delete-btn"
+                type="button"
+                onClick={() => onDelete && onDelete(entry)}
+                aria-label={`Delete reading for ${entry.date}`}
+                title="Delete"
+              >
+                🗑️ Delete
+              </button>
+            )}
           </div>
         </div>
       ))}
