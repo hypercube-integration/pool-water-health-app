@@ -4,17 +4,6 @@ import HistoryList from '../components/HistoryList';
 import TrendChart from '../components/TrendChart';
 import AuthStatus from '../components/AuthStatus';
 
-/** Simple sign-in / sign-out links for Azure Static Web Apps auth (GitHub login) */
-function AuthLinks() {
-  return (
-    <div style={{ textAlign: 'right', marginBottom: 12 }}>
-      <a href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a>
-      {' | '}
-      <a href="/.auth/logout?post_logout_redirect_uri=/">Sign out</a>
-    </div>
-  );
-}
-
 export default function Dashboard() {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -45,9 +34,33 @@ export default function Dashboard() {
     }
   };
 
+  const getMe = async () => {
+    try {
+      const res = await fetch('/.auth/me', { credentials: 'include' });
+      const data = await res.json().catch(() => ({}));
+      return data?.clientPrincipal || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const redirectToLogin = () => {
+    window.location.href = '/.auth/login/github?post_login_redirect_uri=/';
+  };
+
   const handleSubmit = async (entry) => {
     setLoading(true);
     setError(null);
+
+    // Pre-check auth so we don't even call the API when logged out
+    const me = await getMe();
+    if (!me) {
+      setLoading(false);
+      alert('Please sign in to add or edit a reading.');
+      redirectToLogin();
+      return;
+    }
+
     const isEdit = !!entry.id;
 
     try {
@@ -56,6 +69,14 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(entry),
       });
+
+      // Explicitly handle 401 (unauthenticated)
+      if (res.status === 401) {
+        setLoading(false);
+        alert('Please sign in to add or edit a reading.');
+        redirectToLogin();
+        return;
+      }
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       await res.json();
@@ -90,8 +111,15 @@ export default function Dashboard() {
     try {
       const url = `/api/deleteReading?id=${encodeURIComponent(entry.id)}&date=${encodeURIComponent(entry.date)}`;
       const res = await fetch(url, { method: 'DELETE' });
-      if (!res.ok) throw new Error(`Delete failed (${res.status})`);
 
+      if (res.status === 401) {
+        setLoading(false);
+        alert('Please sign in to delete a reading.');
+        redirectToLogin();
+        return;
+      }
+
+      if (!res.ok) throw new Error(`Delete failed (${res.status})`);
       await fetchReadings();
       if (editEntry?.id === entry.id) setEditEntry(null);
     } catch (err) {
@@ -105,7 +133,13 @@ export default function Dashboard() {
   const handleDownloadCSV = async () => {
     try {
       const res = await fetch('/api/exportCSV');
+      if (res.status === 401) {
+        alert('Please sign in to download CSV.');
+        redirectToLogin();
+        return;
+      }
       if (!res.ok) throw new Error(`Failed to export CSV (${res.status})`);
+
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');

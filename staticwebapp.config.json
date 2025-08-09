@@ -5,11 +5,8 @@
     { "route": "/api/deleteReading", "allowedRoles": ["authenticated"] },
     { "route": "/api/exportCSV",   "allowedRoles": ["authenticated"] }
 
-    /* To make reads private too, uncomment:
+    /* If you also want to protect reads, uncomment this:
     ,{ "route": "/api/getReadings", "allowedRoles": ["authenticated"] }
     */
-  ],
-  "responseOverrides": {
-    "401": { "rewrite": "/login.html", "statusCode": 302 }
-  }
+  ]
 }
