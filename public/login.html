@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in required</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 2rem; background:#f6fffe; color:#114; }
+    .card { max-width: 520px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 1.5rem; box-shadow: 0 6px 16px rgba(0,0,0,.08); }
+    a.btn { display:inline-block; margin-top: 1rem; padding:.7rem 1rem; border-radius:8px; background:#00695c; color:#fff; text-decoration:none; font-weight:600; }
+    a.btn:hover{ background:#004d40; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🔐 Sign in required</h1>
+    <p>You must be signed in to use this feature.</p>
+    <a class="btn" href="/.auth/login/github?post_login_redirect_uri=/">Sign in with GitHub</a>
+  </div>
+</body>
+</html>
