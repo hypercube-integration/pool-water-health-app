@@ -1,10 +1,17 @@
-/* --- App shell ----------------------------------------------------------- */
+/* --- Theme & tokens ------------------------------------------------------ */
 :root {
   --radius: 12px;
   --pad: 12px;
   --gap: 12px;
+
+  --teal: #0f766e;
+  --teal-600: #0b5e58;
+  --ink: #0f172a;
+  --muted: #64748b;
+
+  --border: #d6dee6;               /* stronger than before for contrast */
   --bg-soft: rgba(0, 0, 0, 0.03);
-  --border: #e6e6e6;
+  --card: #ffffff;
 }
 
 /* Ensure background extends full height of scroll */
@@ -17,10 +24,10 @@ html, body, #root {
 body {
   margin: 0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  color: #0f172a;
+  color: var(--ink);
 }
 
-/* Page container */
+/* --- Page container ------------------------------------------------------ */
 .container {
   max-width: 1100px;
   margin: 16px auto;
@@ -31,7 +38,7 @@ body {
   box-sizing: border-box;
 }
 
-/* Headings */
+/* --- Headings ------------------------------------------------------------ */
 h1 {
   font-size: clamp(28px, 4vw, 56px);
   line-height: 1.1;
@@ -40,10 +47,11 @@ h1 {
 }
 h3 { margin: 6px 0 8px; }
 
-/* Sections */
+/* --- Sections ------------------------------------------------------------ */
 .section { margin: 16px 0; }
 
 /* --- Date range controls ------------------------------------------------- */
+/* Layout: Row 1 = Start | End, Row 2 = Preset | Apply */
 .date-range {
   display: grid;
   gap: var(--gap);
@@ -61,75 +69,56 @@ h3 { margin: 6px 0 8px; }
 .date-range label {
   display: block;
   font-size: 12px;
-  opacity: 0.8;
-  margin-bottom: 4px;
+  color: var(--muted);
+  margin-bottom: 6px;
 }
 
+/* Inputs + selects */
 .date-range input[type="date"],
 .date-range select {
   width: 100%;
   box-sizing: border-box;
-  padding: 9px 10px;
+  appearance: none;
+  background: var(--card);
+  color: var(--ink);
+  padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
   outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+/* Hover/focus states */
+.date-range input[type="date"]:hover,
+.date-range select:hover {
+  border-color: #c7d0da;
+}
+.date-range input[type="date"]:focus,
+.date-range select:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
   background: #fff;
 }
 
+/* Autofill & calendar icon visibility */
+.date-range input[type="date"]:-webkit-autofill,
+.date-range select:-webkit-autofill {
+  -webkit-text-fill-color: var(--ink) !important;
+  transition: background-color 9999s ease-in-out 0s;
+}
+.date-range input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: .7;
+  cursor: pointer;
+}
+.date-range input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+/* Actions (Apply button container) */
 .date-range .actions {
   display: flex;
-  align-items: flex-end; /* keep button aligned to input bottoms */
+  align-items: flex-end; /* align button with inputs */
   gap: 8px;
 }
 
-button {
-  padding: 9px 14px;
-  border: 0;
-  border-radius: 10px;
-  background: #0f766e;
-  color: #fff;
-  cursor: pointer;
-}
-button:disabled { opacity: .6; cursor: default; }
-button.secondary { background: #e2e8f0; color: #0f172a; }
-
-/* --- Charts -------------------------------------------------------------- */
-.chart-card {
-  width: 100%;
-  height: auto;
-  background: var(--bg-soft);
-  border-radius: var(--radius);
-  padding: var(--pad);
-  box-sizing: border-box;
-}
-
-/* Adds breathing room between chart drawing area and card edges */
-.chart-inner {
-  padding: 0 12px; /* horizontal padding for the plot area */
-  box-sizing: border-box;
-}
-
-/* Tables */
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; }
-th, td {
-  text-align: left;
-  padding: 8px 6px;
-  border-bottom: 1px solid #eee;
-}
-
-/* --- Responsive breakpoints --------------------------------------------- */
-/* Tablet/desktop: two columns per row
-   Row 1: Start | End
-   Row 2: Preset | Apply */
-@media (min-width: 560px) {
-  .date-range {
-    grid-template-columns: 1fr 1fr;
-    grid-auto-flow: row;
-  }
-}
-
-/* Optional: widen container slightly on big screens */
-@media (min-width: 1200px) {
-  .container { max-width: 1200px; }
-}
+/* --- Buttons --------------------------------------------------*
