@@ -8,10 +8,12 @@ import DateRangeControls from '../components/DateRangeControls';
 import AdvisoriesPanel from '../components/AdvisoriesPanel';
 import SettingsPanel from '../components/SettingsPanel';
 import OfflineBanner from '../components/OfflineBanner';
+import SyncStatus from '../components/SyncStatus';
 import useAuth from '../hooks/useAuth';
 import useRoleCheck from '../hooks/useRoleCheck';
 import { withMovingAverages, targetsFromSettings } from '../utils/chemistry';
 import { makeCsv, downloadText, exportXlsx } from '../utils/export';
+import { initOfflineQueue, subscribe as offlineSubscribe, offlineApi } from '../utils/offline';
 
 const UI_KEY = 'pool-ui-pref-v1';
 const LS_CACHE = 'pool-app-cache:getReadings';
@@ -55,6 +57,19 @@ export default function Dashboard() {
     endDate: r.endDate || endDate,
     preset: r.preset || 'custom',
   });
+
+  // --- Offline queue lifecycle
+  useEffect(() => {
+    const cleanup = initOfflineQueue();
+    const unsub = offlineSubscribe((evt) => {
+      if (evt.type === 'sync-end') {
+        // After a sync, refresh readings to show server truth
+        fetchReadings({ startDate, endDate });
+      }
+    });
+    return () => { cleanup(); unsub(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // --- Data
   const [readings, setReadings] = useState([]);
@@ -129,6 +144,32 @@ export default function Dashboard() {
   const doExportXlsx  = async () => { try { await exportXlsx(`${filenameBase}.xlsx`, exportRows, 'Readings'); } catch (e) { alert(e.message || 'Excel export failed.'); } };
   const doServerCsv   = () => { const p = new URLSearchParams({ startDate, endDate, limit: '20000' }); window.location.href = `/api/exportCSV?${p}`; };
 
+  // Editing & deletion
+  const [editing, setEditing] = useState(null);
+  const handleEdit = (reading) => {
+    setEditing(reading);
+    setTimeout(() => document.getElementById('log-entry-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+  };
+  const handleSaved = async () => { setEditing(null); await fetchReadings({ startDate, endDate }); };
+  const handleCancel = () => setEditing(null);
+
+  const handleDelete = async (r) => {
+    if (!window.confirm(`Delete reading for ${r.date}?`)) return;
+
+    // Server expects DELETE /api/deleteReading?id=...&date=...
+    const params = new URLSearchParams();
+    if (r.id) params.set('id', r.id);
+    params.set('date', r.date);
+    const url = `/api/deleteReading?${params.toString()}`;
+
+    const result = await offlineApi.delete(url);
+    if (result.queued) {
+      alert('Delete queued (offline). It will sync when you’re online.');
+    }
+    // Optimistic refresh (if offline, you’ll still see cached data)
+    await fetchReadings({ startDate, endDate });
+  };
+
   const targets = useMemo(() => targetsFromSettings(settings), [settings]);
 
   return (
@@ -137,6 +178,7 @@ export default function Dashboard() {
       <h1>Pool Dashboard</h1>
 
       <OfflineBanner mode={offlineMode} />
+      <SyncStatus />
 
       <DateRangeControls value={{ startDate, endDate, preset }} onChange={setRange} />
 
@@ -159,12 +201,12 @@ export default function Dashboard() {
 
       {canWrite && (
         <div className="section" id="log-entry-form">
-          <LogEntryForm initialValue={null} onSaved={()=>fetchReadings({ startDate, endDate })} onCancel={()=>{}} />
+          <LogEntryForm initialValue={editing} onSaved={handleSaved} onCancel={handleCancel} />
         </div>
       )}
 
       <div className="section table-wrap">
-        <HistoryList readings={readings} canEdit={canWrite} onEdit={()=>{}} onDelete={()=>{}} />
+        <HistoryList readings={readings} canEdit={canWrite} onEdit={handleEdit} onDelete={handleDelete} />
       </div>
     </div>
   );
