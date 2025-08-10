@@ -18,6 +18,13 @@ export default function SettingsPanel({ onChange }) {
   const [currentOutputPercent, setPct] = useState('');
   const [chlorineStrengthPct, setClStrength] = useState('12.5'); // optional fallback for shock
 
+  // --- volume calculator state (Helpers) ---
+  const [lenM, setLenM] = useState('7.0');
+  const [widM, setWidM] = useState('3.2');
+  const [shallowM, setShallowM] = useState('1.22');
+  const [deepM, setDeepM] = useState('1.86');
+  const [calcLitres, setCalcLitres] = useState(0);
+
   // Load persisted settings once
   useEffect(() => {
     const s = loadSettings();
@@ -49,6 +56,21 @@ export default function SettingsPanel({ onChange }) {
     setter(String(value));
     if (id) setTimeout(() => document.getElementById(id)?.focus(), 0);
   };
+
+  // --- tiny volume calculator ---
+  const toNum = (v) => (v === '' || v == null ? NaN : Number(v));
+  const calcVolume = () => {
+    const L = toNum(lenM), W = toNum(widM), S = toNum(shallowM), D = toNum(deepM);
+    if (![L, W, S, D].every((n) => Number.isFinite(n) && n >= 0)) {
+      setCalcLitres(0);
+      return;
+    }
+    const avgDepth = (S + D) / 2;
+    const m3 = L * W * avgDepth;
+    setCalcLitres(Math.round(m3 * 1000)); // litres
+  };
+
+  useEffect(() => { calcVolume(); /* auto-recalc on change */ }, [lenM, widM, shallowM, deepM]);
 
   return (
     <div className="section" style={{ background: 'rgba(0,0,0,0.03)', borderRadius: 12, padding: 12 }}>
@@ -135,13 +157,38 @@ export default function SettingsPanel({ onChange }) {
         <details>
           <summary style={summaryStyle}>Helpers & how to read each value</summary>
           <div style={{ paddingTop: 10, display: 'grid', gap: 12 }}>
-            {/* Pool volume */}
+            {/* NEW: Volume calculator */}
+            <HelperCard title="Quick volume calculator (metres)">
+              <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))' }}>
+                <MiniField label="Length (m)">
+                  <input type="number" step="0.01" value={lenM} onChange={(e)=>setLenM(e.target.value)} style={inputStyle} />
+                </MiniField>
+                <MiniField label="Width (m)">
+                  <input type="number" step="0.01" value={widM} onChange={(e)=>setWidM(e.target.value)} style={inputStyle} />
+                </MiniField>
+                <MiniField label="Shallow (m)">
+                  <input type="number" step="0.01" value={shallowM} onChange={(e)=>setShallowM(e.target.value)} style={inputStyle} />
+                </MiniField>
+                <MiniField label="Deep (m)">
+                  <input type="number" step="0.01" value={deepM} onChange={(e)=>setDeepM(e.target.value)} style={inputStyle} />
+                </MiniField>
+              </div>
+              <p style={pStyle}>
+                Average depth = (Shallow + Deep) / 2. Volume (L) = Length × Width × AvgDepth × 1000.
+              </p>
+              <div className="helper-actions" style={{ display:'flex', gap: 8, alignItems:'center', flexWrap:'wrap' }}>
+                <div><strong>Estimated volume:</strong> {calcLitres ? calcLitres.toLocaleString() : '—'} L</div>
+                <button onClick={()=>setAndFocus(setPoolVolumeL, calcLitres || '', 'poolVolumeL')} disabled={!calcLitres}>
+                  Use result
+                </button>
+                <button className="secondary" onClick={calcVolume}>Recalculate</button>
+              </div>
+            </HelperCard>
+
+            {/* Pool volume notes + presets */}
             <HelperCard title="Pool volume (L)">
               <p style={pStyle}>
-                Use <em>Length × Width × Average depth</em> (in metres) × 1000.
-                For your Cervantes 7.0&nbsp;m × 3.2&nbsp;m, depths 1.22–1.86&nbsp;m:
-                avg depth = (1.22+1.86)/2 = <strong>1.54&nbsp;m</strong>.
-                Volume = 7 × 3.2 × 1.54 = <strong>34.496&nbsp;m³ ≈ 34,500&nbsp;L</strong>.
+                For your Cervantes 7.0 × 3.2 m with depths 1.22–1.86 m, avg depth = 1.54 m → ≈ <strong>34,500 L</strong>.
               </p>
               <div className="helper-actions">
                 <button onClick={()=>setAndFocus(setPoolVolumeL, 34500, 'poolVolumeL')}>Use 34,500 L</button>
@@ -152,8 +199,8 @@ export default function SettingsPanel({ onChange }) {
             {/* Salt pool mode */}
             <HelperCard title="Salt pool mode">
               <p style={pStyle}>
-                Turn this on for a salt chlorinator. Advisories will suggest <em>chlorinator % / runtime</em> adjustments
-                rather than liquid chlorine dosing.
+                Turn this on for a salt chlorinator. Advisories will suggest <em>chlorinator % / runtime</em>
+                adjustments rather than liquid chlorine dosing.
               </p>
               <div className="helper-actions">
                 <button onClick={()=>setSaltPoolMode(true)}>Enable salt mode</button>
@@ -163,8 +210,8 @@ export default function SettingsPanel({ onChange }) {
             {/* Cell rating */}
             <HelperCard title="Cell rating (g/hr @100%)">
               <p style={pStyle}>
-                Find this on the chlorinator label or manual (e.g., 15–35 g/hr). It’s how many grams of chlorine the cell
-                makes per hour at 100% output. If unsure, leave blank; advice will still work, just less precise.
+                Find this on the chlorinator label/manual (e.g., 15–35 g/hr). It’s how many grams of chlorine the cell
+                makes per hour at 100% output. If unsure, leave blank; advice still works, just less precise.
               </p>
               <div className="helper-actions" style={{ gap: 6 }}>
                 {[15,20,25,30].map(v=>(
@@ -176,7 +223,7 @@ export default function SettingsPanel({ onChange }) {
             {/* Pump hours */}
             <HelperCard title="Daily pump hours">
               <p style={pStyle}>
-                Use your timer schedule (e.g., 2×4h = 8h). Longer runs make more chlorine. In hot weather you may need more.
+                Use your timer schedule (e.g., 2×4h = 8h). Longer runs make more chlorine. In hotter water, you may need more.
               </p>
               <div className="helper-actions" style={{ gap: 6 }}>
                 {[6,8,10,12].map(v=>(
@@ -189,8 +236,8 @@ export default function SettingsPanel({ onChange }) {
             <HelperCard title="Current output (%)">
               <p style={pStyle}>
                 On your <strong>Pool Controls XLS (Xtra Low Salt)</strong> unit:
-                press <strong>Menu</strong>, use <strong>◀ ▶</strong> to find the <em>OUTPUT xx%</em> page, then
-                use <strong>▲ ▼</strong> to adjust. Let it sit to save.
+                press <strong>Menu</strong>, use <strong>◀ ▶</strong> to find <em>OUTPUT xx%</em>, then use <strong>▲ ▼</strong> to adjust.
+                Let it sit to save.
               </p>
               <div className="helper-actions" style={{ gap: 6 }}>
                 {[40,60,80,100].map(v=>(
@@ -203,7 +250,7 @@ export default function SettingsPanel({ onChange }) {
             <HelperCard title="Liquid chlorine strength (%) (optional)">
               <p style={pStyle}>
                 Only used for occasional <em>shock</em> dosing. Pool shop liquid is commonly <strong>12.5%</strong>.
-                Supermarket bleach is often <strong>4–6%</strong>. It’s printed as “Available Chlorine %”.
+                Supermarket bleach is often <strong>4–6%</strong>.
               </p>
               <div className="helper-actions" style={{ gap: 6 }}>
                 {[12.5,10,6].map(v=>(
@@ -246,20 +293,25 @@ function HelperCard({ title, children }) {
   );
 }
 
+function MiniField({ label, children }) {
+  return (
+    <label style={{ display: 'grid', gap: 6 }}>
+      <span style={{ fontSize: 12, opacity: 0.8 }}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
 const inputStyle = {
   width: '100%',
   boxSizing: 'border-box',
   background: '#fff',
   color: '#0f172a',
   padding: '10px 12px',
-  border: '1px solid #d6dee6',
+  border: '1px solid '#d6dee6',
   borderRadius: 10,
   outline: 'none',
 };
 
-const summaryStyle = {
-  cursor: 'pointer',
-  fontWeight: 600,
-};
-
+const summaryStyle = { cursor: 'pointer', fontWeight: 600 };
 const pStyle = { margin: 0, lineHeight: 1.35, color: '#334155' };
