@@ -244,3 +244,44 @@ th, td {
   align-items: center;
   justify-content: flex-start;
 }
+
+/* Admin page helpers */
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+.admin-field { display: grid; gap: 6px; }
+.admin-field input {
+  height: 44px;
+  background: #fff;
+  border: 1px solid #d6dee6;
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #0f172a;
+}
+.code-block {
+  border: 1px solid #e5eaef;
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 12px;
+  margin: 12px 0;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 1px solid #e5eaef;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #0f172a;
+  text-decoration: none;
+  height: 34px;
+}
+.chip.danger {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #7f1d1d;
+}
