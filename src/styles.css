@@ -207,3 +207,40 @@ th, td {
 /* Advisory list tweaks (optional) */
 .section ul { margin: 0; padding-left: 18px; }
 .section li { line-height: 1.35; }
+
+/* --- Date range controls layout & alignment --- */
+.date-range-controls { display: grid; gap: 12px; }
+
+.date-range-controls .date-grid.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.date-range-controls .date-grid.actions {
+  display: grid;
+  grid-template-columns: 1fr auto; /* Preset | Actions */
+  gap: 12px;
+  align-items: end;
+}
+
+@media (max-width: 640px) {
+  .date-range-controls .date-grid.actions { grid-template-columns: 1fr; }
+}
+
+/* Consistent control height + tidy alignment */
+.date-range-controls input[type="date"],
+.date-range-controls select,
+.date-range-controls button {
+  height: 44px;
+}
+
+.date-range-controls .date-field { display: grid; gap: 6px; }
+.date-range-controls .date-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+}
