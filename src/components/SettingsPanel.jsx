@@ -44,13 +44,27 @@ export default function SettingsPanel({ onChange }) {
     onChange?.(s);
   };
 
+  // Helper setters
+  const setAndFocus = (setter, value, id) => {
+    setter(String(value));
+    if (id) setTimeout(() => document.getElementById(id)?.focus(), 0);
+  };
+
   return (
     <div className="section" style={{ background: 'rgba(0,0,0,0.03)', borderRadius: 12, padding: 12 }}>
       <h3 style={{ marginTop: 0 }}>Settings</h3>
 
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', alignItems: 'end' }}>
         <Labeled label="Pool volume (L)">
-          <input type="number" inputMode="numeric" value={poolVolumeL} onChange={(e)=>setPoolVolumeL(e.target.value)} style={inputStyle} placeholder="e.g., 34500" />
+          <input
+            id="poolVolumeL"
+            type="number"
+            inputMode="numeric"
+            value={poolVolumeL}
+            onChange={(e)=>setPoolVolumeL(e.target.value)}
+            style={inputStyle}
+            placeholder="e.g., 34500"
+          />
         </Labeled>
 
         <Labeled label="Salt pool mode">
@@ -61,19 +75,54 @@ export default function SettingsPanel({ onChange }) {
         </Labeled>
 
         <Labeled label="Cell rating (g/hr @100%)">
-          <input type="number" inputMode="numeric" value={chlorinatorRated_g_per_hr} onChange={(e)=>setRated(e.target.value)} style={inputStyle} placeholder="e.g., 20" />
+          <input
+            id="cellRate"
+            type="number"
+            inputMode="numeric"
+            value={chlorinatorRated_g_per_hr}
+            onChange={(e)=>setRated(e.target.value)}
+            style={inputStyle}
+            placeholder="e.g., 20"
+          />
         </Labeled>
 
         <Labeled label="Daily pump hours">
-          <input type="number" inputMode="numeric" value={dailyPumpHours} onChange={(e)=>setHours(e.target.value)} style={inputStyle} placeholder="e.g., 8" />
+          <input
+            id="pumpHours"
+            type="number"
+            inputMode="numeric"
+            value={dailyPumpHours}
+            onChange={(e)=>setHours(e.target.value)}
+            style={inputStyle}
+            placeholder="e.g., 8"
+          />
         </Labeled>
 
         <Labeled label="Current output (%)">
-          <input type="number" inputMode="numeric" value={currentOutputPercent} onChange={(e)=>setPct(e.target.value)} style={inputStyle} placeholder="e.g., 60" />
+          <input
+            id="outputPct"
+            type="number"
+            inputMode="numeric"
+            value={currentOutputPercent}
+            onChange={(e)=>setPct(e.target.value)}
+            style={inputStyle}
+            placeholder="e.g., 60"
+          />
         </Labeled>
 
         <Labeled label="Liquid chlorine strength (%) (optional)">
-          <input type="number" step="0.1" min="1" max="15" inputMode="decimal" value={chlorineStrengthPct} onChange={(e)=>setClStrength(e.target.value)} style={inputStyle} placeholder="e.g., 12.5" />
+          <input
+            id="clStrength"
+            type="number"
+            step="0.1"
+            min="1"
+            max="15"
+            inputMode="decimal"
+            value={chlorineStrengthPct}
+            onChange={(e)=>setClStrength(e.target.value)}
+            style={inputStyle}
+            placeholder="e.g., 12.5"
+          />
         </Labeled>
 
         <div>
@@ -81,9 +130,97 @@ export default function SettingsPanel({ onChange }) {
         </div>
       </div>
 
+      {/* Helpers */}
+      <div style={{ marginTop: 14 }}>
+        <details>
+          <summary style={summaryStyle}>Helpers & how to read each value</summary>
+          <div style={{ paddingTop: 10, display: 'grid', gap: 12 }}>
+            {/* Pool volume */}
+            <HelperCard title="Pool volume (L)">
+              <p style={pStyle}>
+                Use <em>Length × Width × Average depth</em> (in metres) × 1000.
+                For your Cervantes 7.0&nbsp;m × 3.2&nbsp;m, depths 1.22–1.86&nbsp;m:
+                avg depth = (1.22+1.86)/2 = <strong>1.54&nbsp;m</strong>.
+                Volume = 7 × 3.2 × 1.54 = <strong>34.496&nbsp;m³ ≈ 34,500&nbsp;L</strong>.
+              </p>
+              <div className="helper-actions">
+                <button onClick={()=>setAndFocus(setPoolVolumeL, 34500, 'poolVolumeL')}>Use 34,500 L</button>
+                <button className="secondary" onClick={()=>setAndFocus(setPoolVolumeL, 35000, 'poolVolumeL')}>Round to 35,000 L</button>
+              </div>
+            </HelperCard>
+
+            {/* Salt pool mode */}
+            <HelperCard title="Salt pool mode">
+              <p style={pStyle}>
+                Turn this on for a salt chlorinator. Advisories will suggest <em>chlorinator % / runtime</em> adjustments
+                rather than liquid chlorine dosing.
+              </p>
+              <div className="helper-actions">
+                <button onClick={()=>setSaltPoolMode(true)}>Enable salt mode</button>
+              </div>
+            </HelperCard>
+
+            {/* Cell rating */}
+            <HelperCard title="Cell rating (g/hr @100%)">
+              <p style={pStyle}>
+                Find this on the chlorinator label or manual (e.g., 15–35 g/hr). It’s how many grams of chlorine the cell
+                makes per hour at 100% output. If unsure, leave blank; advice will still work, just less precise.
+              </p>
+              <div className="helper-actions" style={{ gap: 6 }}>
+                {[15,20,25,30].map(v=>(
+                  <button key={v} className="secondary" onClick={()=>setAndFocus(setRated, v, 'cellRate')}>{v} g/hr</button>
+                ))}
+              </div>
+            </HelperCard>
+
+            {/* Pump hours */}
+            <HelperCard title="Daily pump hours">
+              <p style={pStyle}>
+                Use your timer schedule (e.g., 2×4h = 8h). Longer runs make more chlorine. In hot weather you may need more.
+              </p>
+              <div className="helper-actions" style={{ gap: 6 }}>
+                {[6,8,10,12].map(v=>(
+                  <button key={v} className="secondary" onClick={()=>setAndFocus(setHours, v, 'pumpHours')}>{v} h</button>
+                ))}
+              </div>
+            </HelperCard>
+
+            {/* Output percent */}
+            <HelperCard title="Current output (%)">
+              <p style={pStyle}>
+                On your <strong>Pool Controls XLS (Xtra Low Salt)</strong> unit:
+                press <strong>Menu</strong>, use <strong>◀ ▶</strong> to find the <em>OUTPUT xx%</em> page, then
+                use <strong>▲ ▼</strong> to adjust. Let it sit to save.
+              </p>
+              <div className="helper-actions" style={{ gap: 6 }}>
+                {[40,60,80,100].map(v=>(
+                  <button key={v} className="secondary" onClick={()=>setAndFocus(setPct, v, 'outputPct')}>{v}%</button>
+                ))}
+              </div>
+            </HelperCard>
+
+            {/* Liquid strength */}
+            <HelperCard title="Liquid chlorine strength (%) (optional)">
+              <p style={pStyle}>
+                Only used for occasional <em>shock</em> dosing. Pool shop liquid is commonly <strong>12.5%</strong>.
+                Supermarket bleach is often <strong>4–6%</strong>. It’s printed as “Available Chlorine %”.
+              </p>
+              <div className="helper-actions" style={{ gap: 6 }}>
+                {[12.5,10,6].map(v=>(
+                  <button key={v} className="secondary" onClick={()=>setAndFocus(setClStrength, v, 'clStrength')}>{v}%</button>
+                ))}
+              </div>
+            </HelperCard>
+
+            <div style={{ textAlign: 'right' }}>
+              <button onClick={save}>Save all</button>
+            </div>
+          </div>
+        </details>
+      </div>
+
       <div style={{ fontSize: 12, color: '#64748b', marginTop: 8, lineHeight: 1.4 }}>
-        <div><strong>Tip:</strong> Your chlorinator’s rating (g/hr) is usually on the label/spec sheet. If unknown, leave it blank and the app will give general guidance.</div>
-        <div>“Liquid chlorine strength” is only used for occasional shock dosing; it’s optional for salt pools.</div>
+        These settings are stored locally in your browser and used to tailor dosage recommendations.
       </div>
     </div>
   );
@@ -93,6 +230,17 @@ function Labeled({ label, children }) {
   return (
     <div>
       <label style={{ display: 'block', fontSize: 12, opacity: 0.8, marginBottom: 6 }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function HelperCard({ title, children }) {
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid #e5eaef', borderRadius: 10, padding: 12
+    }}>
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>{title}</div>
       {children}
     </div>
   );
@@ -108,3 +256,10 @@ const inputStyle = {
   borderRadius: 10,
   outline: 'none',
 };
+
+const summaryStyle = {
+  cursor: 'pointer',
+  fontWeight: 600,
+};
+
+const pStyle = { margin: 0, lineHeight: 1.35, color: '#334155' };
