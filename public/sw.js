@@ -1,10 +1,8 @@
-/* public/sw.js */
+/* public/sw.js
+ * PWA shell cache; NEVER cache /.auth/*; network-first for /api
+ */
 const CACHE_NAME = 'pool-app-v1';
-const APP_SHELL = [
-  '/', '/index.html',
-  '/manifest.webmanifest',
-  // Vite will fingerprint assets; runtime will still cache after first load.
-];
+const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
@@ -25,7 +23,13 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Network-first for API; fallback to cache if available.
+  // 1) Never cache Azure Static Web Apps auth endpoints
+  if (url.pathname.startsWith('/.auth/')) {
+    event.respondWith(fetch(event.request).catch(() => new Response('', { status: 204 })));
+    return;
+  }
+
+  // 2) Network-first for API; fallback to cache if available
   if (url.pathname.startsWith('/api/')) {
     event.respondWith((async () => {
       try {
@@ -34,7 +38,6 @@ self.addEventListener('fetch', (event) => {
       } catch {
         const cache = await caches.match(event.request);
         if (cache) return cache;
-        // As last resort, generic response so UI can fallback to localStorage
         return new Response(JSON.stringify({ offline: true }), {
           status: 503, headers: { 'Content-Type': 'application/json' }
         });
@@ -43,7 +46,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first for everything else (app shell)
+  // 3) Cache-first for app shell & static assets
   event.respondWith((async () => {
     const cached = await caches.match(event.request);
     if (cached) return cached;

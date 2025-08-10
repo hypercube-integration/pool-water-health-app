@@ -1,50 +1,29 @@
-import { useEffect, useState } from 'react';
+// src/components/AuthStatus.jsx
+import useAuth from '../hooks/useAuth';
 
-/**
- * AuthStatus reads /.auth/me (Azure Static Web Apps)
- * and shows the current identity + quick Sign in/Sign out links.
- */
 export default function AuthStatus() {
-  const [me, setMe] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  async function loadMe() {
-    try {
-      setLoading(true);
-      const res = await fetch('/.auth/me', { credentials: 'include' });
-      // When logged out, SWA returns 200 with empty body or an object with empty clientPrincipal
-      const data = await res.json().catch(() => ({}));
-      setMe(data?.clientPrincipal || null);
-    } catch {
-      setMe(null);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    loadMe();
-  }, []);
-
-  const signInUrl = '/.auth/login/github?post_login_redirect_uri=/';
-  const signOutUrl = '/.auth/logout?post_logout_redirect_uri=/';
+  const { user, authLoading } = useAuth();
 
   return (
     <div className="auth-status">
-      {loading ? (
-        <span>🔐 Checking sign-in…</span>
-      ) : me ? (
-        <span>
-          Signed in as <strong>{me.userDetails}</strong>
-          {' '}(<code>{me.identityProvider}</code>) ·{' '}
-          <a href={signOutUrl}>Sign out</a>
-        </span>
+      {authLoading ? (
+        <span>Checking sign-in…</span>
+      ) : user ? (
+        <>
+          <span>
+            Signed in as <strong>{user?.userDetails || 'user'}</strong>{' '}
+            <span style={{ opacity: 0.7 }}>(github)</span>
+          </span>
+          <a className="chip danger" href="/.auth/logout?post_logout_redirect_uri=/signed-out">
+            Sign out
+          </a>
+        </>
       ) : (
-        <span>
-          Not signed in · <a href={signInUrl}>Sign in</a>
-        </span>
+        <>
+          <span>Not signed in</span>
+          <a className="chip" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a>
+        </>
       )}
-      <button className="auth-refresh" type="button" onClick={loadMe} title="Refresh status">↻</button>
     </div>
   );
 }

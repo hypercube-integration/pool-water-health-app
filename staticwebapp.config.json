@@ -1,11 +1,17 @@
 {
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": ["/api/*", "/.auth/*", "/signed-out"]
+  },
   "routes": [
+    { "route": "/signed-out", "allowedRoles": ["anonymous"] },
+
     { "route": "/api/submitReading", "allowedRoles": ["writer", "admin"] },
     { "route": "/api/updateReading", "allowedRoles": ["editor", "admin"] },
     { "route": "/api/deleteReading", "allowedRoles": ["deleter", "admin"] },
     { "route": "/api/exportCSV",     "allowedRoles": ["exporter", "admin"] }
 
-    /* Reads can stay public or be restricted:
+    /* If you previously locked down getReadings, keep/add this:
     ,{ "route": "/api/getReadings",  "allowedRoles": ["authenticated", "admin"] }
     */
   ]
