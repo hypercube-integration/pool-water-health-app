@@ -1,5 +1,5 @@
 // src/components/SyncStatus.jsx
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getStatus, subscribe, syncNow } from '../utils/offline';
 
 function fmtTime(t) {
@@ -11,7 +11,6 @@ function fmtTime(t) {
 async function checkReachable() {
   try {
     const ts = Date.now();
-    // SW never caches /.auth/* in our setup
     const res = await fetch(`/.auth/me?ts=${ts}`, { credentials: 'include', cache: 'no-store' });
     return res.ok;
   } catch {
@@ -21,45 +20,62 @@ async function checkReachable() {
 
 export default function SyncStatus() {
   const [st, setSt] = useState(getStatus());
-  const [reachable, setReachable] = useState(null); // null | boolean
+  const [reachable, setReachable] = useState(null);
+  const backoffRef = useRef(0); // ms
 
-  // Subscribe to queue status
   useEffect(() => {
     setSt(getStatus());
     return subscribe((_evt, status) => setSt(status));
   }, []);
 
-  // Online/offline listeners + periodic reachability checks
   useEffect(() => {
     let cancelled = false;
+    let timer = null;
 
-    const update = async () => {
-      const ok = await checkReachable();
-      if (!cancelled) setReachable(ok);
+    const schedule = (ms) => {
+      clearTimeout(timer);
+      timer = setTimeout(runCheck, ms);
     };
 
-    const handleOnline = () => { update(); };
-    const handleOffline = () => { setReachable(false); };
+    const runCheck = async () => {
+      const ok = await checkReachable();
+      if (cancelled) return;
+      setReachable(ok);
 
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
+      // backoff: if unreachable, gradually increase up to 5 min; if reachable, reset to 10 min
+      if (!ok && st.online) {
+        backoffRef.current = Math.min((backoffRef.current || 15000) * 2, 5 * 60 * 1000);
+        schedule(backoffRef.current);
+      } else {
+        backoffRef.current = 10 * 60 * 1000; // 10 min
+        schedule(backoffRef.current);
+      }
+    };
 
-    // Initial check + periodic
-    update();
-    const id = setInterval(update, 15000);
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) update();
-    });
+    // initial
+    runCheck();
+
+    // react to browser online/offline
+    const onOnline = () => { backoffRef.current = 0; runCheck(); };
+    const onOffline = () => { setReachable(false); };
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+
+    // only check when tab is visible
+    const onVis = () => { if (!document.hidden) { backoffRef.current = 0; runCheck(); } };
+    document.addEventListener('visibilitychange', onVis);
 
     return () => {
       cancelled = true;
-      clearInterval(id);
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      clearTimeout(timer);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      document.removeEventListener('visibilitychange', onVis);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [st.online]);
 
-  const browserOnline = st.online; // from navigator.onLine via getStatus()
+  const browserOnline = st.online;
   const effectiveOnline = browserOnline && reachable === true;
   const limited = browserOnline && reachable === false;
 
