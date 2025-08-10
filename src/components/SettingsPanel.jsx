@@ -308,7 +308,7 @@ const inputStyle = {
   background: '#fff',
   color: '#0f172a',
   padding: '10px 12px',
-  border: '1px solid '#d6dee6',
+  border: '1px solid #d6dee6',
   borderRadius: 10,
   outline: 'none',
 };
