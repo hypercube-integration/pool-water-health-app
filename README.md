@@ -1,137 +1,110 @@
-# Pool Water Health App
+# 🏊 Pool Water Health App
 
-A responsive, Azure-hosted dashboard for tracking and maintaining your pool's chemical balance.  
-Built with **React**, **Vite**, and **Azure Static Web Apps** (free tier), with serverless APIs for secure data operations.
+A **free-tier Azure** powered pool water monitoring and management app.  
+Tracks daily **chlorine** and **pH** readings, recommends chemical actions, and supports **offline-first** usage with powerful export and sharing features.
 
 ---
 
 ## 🚀 Features
 
-### 1. **Authentication & Roles**
-- Integrated with **Azure Static Web Apps Authentication** (`/.auth/me`).
-- Role-based UI controls:
-  - **Reader**: View dashboard & charts.
-  - **Writer / Editor / Admin**: Add, edit, delete, and export logs.
+### Core Monitoring
+- **Daily chlorine & pH tracking** — manual entry or imported from logs.
+- **Salt pool mode logic** — adapts recommendations for salt chlorinator systems.
+- **Target range overlays** — visible on charts for quick visual analysis.
+- **7-day moving averages** — smooth out short-term fluctuations.
 
-### 2. **Data Management**
-- Add new readings via `LogEntryForm`.
-- Edit or delete existing readings directly from the **History List**.
-- Data stored and retrieved via Azure serverless APIs.
-- API responses returned as JSON; data validated and type-coerced for charts.
+### Dashboard & Charts
+- **Interactive dashboard** for real-time or last-synced readings.
+- **Multi-line charts** with color coding by metric.
+- **Target range shading** for ideal water balance.
+- Toggle between **raw** and **averaged** data.
 
-### 3. **Date Range Filters**
-- Filter readings by selecting **Start Date** / **End Date**.
-- Common presets: *Last 7 days*, *Last 30 days*, *Last 90 days*, or *Custom*.
-- Automatically refreshes dashboard data when range changes.
+### Data Management
+- **Editable log entries** — correct mistakes directly in the app.
+- **Export options**:
+  - CSV (client-side)
+  - Excel `.xlsx` (client-side)
+  - CSV (server-side)
+- **Chart image export** — share your graphs as `.png` with pool technicians.
+- **Copy link** with filters & date range preserved.
+- **Offline queue** — add/edit data while offline; sync automatically when back online.
 
-### 4. **Charts**
-- Built with **Recharts** and fully responsive:
-  - pH
-  - Chlorine (ppm)
-  - Salt (ppm)
-- **Target range shaded bands** for each parameter:
-  - pH: Orange band
-  - Chlorine: Green band
-  - Salt: Blue band
-- **7-day moving average** overlays (toggleable).
-- Sorts data ascending for left-to-right time flow.
-- Auto-resizes on **mobile orientation change**.
+### Pool Equipment Helpers
+- Chlorinator % reading helper (XLS Xtra Low Salt control unit).
+- Metric explanations for **all settings** in the dashboard.
+- **Tiny volume calculator** — quick estimate of added water volumes.
 
-### 5. **Water Care Advisories (NEW)**
-- Calculates advisories based on the **latest reading** in the selected date range.
-- Detects out-of-range pH, chlorine, and salt levels.
-- Severity indicators:
-  - ✅ *All Good*
-  - ℹ️ *Info*
-  - ⚠️ *Attention Needed*
-  - ❗ *Action Required*
-- Offers practical suggestions (e.g., “Add salt gradually and re-test”).
+### User & Role Management
+- GitHub login via Azure Static Web Apps authentication.
+- Role-based permissions (`admin`, `editor`, `viewer`).
+- Admin panel for managing users and roles.
 
-### 6. **Responsive Design**
-- Works seamlessly on desktop, tablet, and mobile browsers.
-- Charts expand to full width in landscape mode.
-- Mobile-friendly date pickers and buttons.
+### Offline-First Architecture
+- Works fully offline — view charts & settings with last-synced data.
+- Queued changes auto-sync when connection restores.
+- **Reachability-aware**: distinguishes between offline, limited, and online states.
+- Optimized API calls to stay within Azure Free Tier limits.
+
+---
+
+## 🛠 Tech Stack
+- **Frontend**: React + Vite
+- **Auth**: Azure Static Web Apps Auth (GitHub provider)
+- **Backend**: Azure Functions (Free Tier)
+- **Storage**: Azure Table Storage / Blob Storage (Free Tier)
+- **Charts**: [Recharts](https://recharts.org/)
+- **Exports**: `xlsx`, custom CSV and image export logic
 
 ---
 
 ## 📂 Project Structure
-
 ```
 src/
-  components/
-    AdvisoriesPanel.jsx     # Displays current advisories based on latest reading
-    AuthStatus.jsx          # Shows logged-in user and logout link
-    DateRangeControls.jsx   # Date range & preset selector
-    HistoryList.jsx         # Table of historical readings (editable)
-    LogEntryForm.jsx        # Form to add or edit a reading
-    TrendChart.jsx          # Charts for pH, chlorine, salt
-  hooks/
-    useAuth.js              # Gets auth status from /.auth/me
-    useRoleCheck.js         # Checks if user has any of given roles
-  pages/
-    Dashboard.jsx           # Main dashboard page
-  utils/
-    chemistry.js            # Target ranges, advisory logic, moving averages
-styles.css                  # Global styles & dashboard layout
+  components/    # Reusable UI components (charts, forms, helpers)
+  hooks/         # Custom hooks (auth, role checks, offline sync)
+  pages/         # Page-level components (Dashboard, Admin, Login)
+  utils/         # Helper utilities (chemistry logic, export tools)
+  assets/        # Icons, images
+public/          # Static files (icons, manifest)
 ```
 
 ---
 
-## 🔧 Local Development
+## 📦 Setup
 
-1. **Clone the repo**
-   ```bash
-   git clone <repo-url>
-   cd pool-water-health-app
-   ```
+```bash
+# Clone the repo
+git clone https://github.com/<your-repo>.git
+cd pool-water-health-app
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+# Install dependencies
+npm install
 
-3. **Run locally**
-   ```bash
-   npm run dev
-   ```
-   App will be available at `http://localhost:5173/`
+# Start local dev server
+npm run dev
+
+# Build for production
+npm run build
+```
 
 ---
 
-## ☁️ Deployment to Azure Static Web Apps
-
-1. Push your code to GitHub.
-2. In Azure Portal:
-   - Create a **Static Web App (Free)**.
-   - Connect to your GitHub repo.
-   - Set build presets: **Vite** → `dist` as output folder.
-3. APIs are deployed automatically from `/api`.
+## 🔒 Roles
+| Role    | Permissions |
+| ------- | ----------- |
+| admin   | Full control over users, settings, data |
+| editor  | Add, edit, delete logs; export data |
+| viewer  | View dashboard and charts only |
 
 ---
 
-## 🔐 Authentication Notes
-
-- Use the full URL for `.auth/me` to verify login:
-  ```
-  https://<your-site>.azurestaticapps.net/.auth/me
-  ```
-- To reset stale mobile credentials:
-  - Visit `/logout` then `/login/github` (or other provider).
+## 📤 Export Types
+- **Export CSV** — quick download from browser.
+- **Export Excel (.xlsx)** — formatted spreadsheet with data & averages.
+- **Export CSV (Server)** — server-generated CSV for consistent formatting.
+- **Export Chart (.png)** — save visual snapshots.
 
 ---
 
-## 🧪 Testing Checklist
-
-- [x] Log in as **Reader** → verify read-only dashboard.
-- [x] Log in as **Writer** → verify add/edit/delete functions.
-- [x] Change date range → verify filtered data & advisories update.
-- [x] Toggle 7-day averages → verify line overlay appears/disappears.
-- [x] Mobile rotation → charts resize without breaking layout.
-- [x] Target bands visible on all charts (including Salt green band).
-- [x] Advisories reflect latest reading.
-
----
-
-## 📜 License
-
-MIT
+## 📋 License
+MIT License
