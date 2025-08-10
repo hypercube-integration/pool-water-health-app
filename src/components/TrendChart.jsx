@@ -1,103 +1,71 @@
 // src/components/TrendChart.jsx
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceArea, Legend,
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceArea,
 } from 'recharts';
-import { TARGETS } from '../utils/chemistry';
 
-/**
- * Props:
- *  - data: Array<{ date: string, ph?: number, chlorine?: number, salt?: number, phAvg7?: number, chlorineAvg7?: number, saltAvg7?: number }>
- *  - height?: number
- *  - targetBands?: { ph?: [number,number], chlorine?: [number,number], salt?: [number,number] }
- *  - showAverages?: boolean (default true)
- */
-export default function TrendChart({
-  data = [],
-  height = 280,
-  targetBands = TARGETS,
-  showAverages = true,
-}) {
-  const sorted = [...data].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+export default function TrendChart({ data, showAverages = true, targets }) {
+  const t = targets || {
+    ph: [7.2, 7.6],
+    chlorine: [1, 3],
+    salt: [3000, 4500],
+  };
+
+  const common = {
+    margin: { top: 10, right: 18, bottom: 0, left: 0 },
+  };
 
   return (
-    <div className="trend-chart" style={{ display: 'grid', gap: 12 }}>
+    <div className="chart-grid">
       {/* pH */}
-      <ChartCard title="pH" height={height}>
-        <div className="chart-inner">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={sorted}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" padding={{ left: 5, right: 20 }} />
-              <YAxis domain={[6.8, 8.2]} />
-              <Tooltip />
-              <Legend />
-              {Array.isArray(targetBands?.ph) && (
-                <ReferenceArea y1={targetBands.ph[0]} y2={targetBands.ph[1]} fill="#f97316" fillOpacity={0.15} stroke="none" />
-              )}
-              <Line type="monotone" dataKey="ph" stroke="#f97316" dot name="pH" />
-              {showAverages && (
-                <Line type="monotone" dataKey="phAvg7" stroke="#9a3412" strokeDasharray="5 5" dot={false} name="pH (7-day avg)" />
-              )}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </ChartCard>
+      <div className="chart-panel">
+        <h3>pH</h3>
+        <ResponsiveContainer width="100%" height={260}>
+          <LineChart data={data} {...common}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis domain={['auto', 'auto']} />
+            <Tooltip />
+            <Legend />
+            <ReferenceArea y1={t.ph[0]} y2={t.ph[1]} fill="orange" fillOpacity={0.12} />
+            <Line type="monotone" dataKey="ph" name="pH" dot={false} />
+            {showAverages && <Line type="monotone" dataKey="phAvg7" name="pH (7d avg)" strokeDasharray="5 5" dot={false} />}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
 
       {/* Chlorine */}
-      <ChartCard title="Chlorine (ppm)" height={height}>
-        <div className="chart-inner">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={sorted}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" padding={{ left: 5, right: 20 }} />
-              <YAxis domain={[0, 5]} />
-              <Tooltip />
-              <Legend />
-              {Array.isArray(targetBands?.chlorine) && (
-                <ReferenceArea y1={targetBands.chlorine[0]} y2={targetBands.chlorine[1]} fill="#16a34a" fillOpacity={0.15} stroke="none" />
-              )}
-              <Line type="monotone" dataKey="chlorine" stroke="#16a34a" dot name="Chlorine" />
-              {showAverages && (
-                <Line type="monotone" dataKey="chlorineAvg7" stroke="#166534" strokeDasharray="5 5" dot={false} name="Chlorine (7-day avg)" />
-              )}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </ChartCard>
+      <div className="chart-panel">
+        <h3>Chlorine (ppm)</h3>
+        <ResponsiveContainer width="100%" height={260}>
+          <LineChart data={data} {...common}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis domain={['auto', 'auto']} />
+            <Tooltip />
+            <Legend />
+            <ReferenceArea y1={t.chlorine[0]} y2={t.chlorine[1]} fill="green" fillOpacity={0.12} />
+            <Line type="monotone" dataKey="chlorine" name="Chlorine" dot={false} />
+            {showAverages && <Line type="monotone" dataKey="chlorineAvg7" name="Chlorine (7d avg)" strokeDasharray="5 5" dot={false} />}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
 
       {/* Salt */}
-      <ChartCard title="Salt (ppm)" height={height}>
-        <div className="chart-inner">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={sorted}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" padding={{ left: 5, right: 20 }} />
-              <YAxis domain={[2000, 5000]} />
-              <Tooltip />
-              <Legend />
-              {Array.isArray(targetBands?.salt) && (
-                <ReferenceArea y1={targetBands.salt[0]} y2={targetBands.salt[1]} fill="#3b82f6" fillOpacity={0.15} stroke="none" />
-              )}
-              <Line type="monotone" dataKey="salt" stroke="#3b82f6" dot name="Salt" />
-              {showAverages && (
-                <Line type="monotone" dataKey="saltAvg7" stroke="#1e40af" strokeDasharray="5 5" dot={false} name="Salt (7-day avg)" />
-              )}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </ChartCard>
-    </div>
-  );
-}
-
-function ChartCard({ title, height, children }) {
-  return (
-    <section style={{ margin: '8px 0' }}>
-      <h3 style={{ margin: '6px 0' }}>{title}</h3>
-      <div className="chart-card" style={{ width: '100%', height }}>
-        {children}
+      <div className="chart-panel">
+        <h3>Salt (ppm)</h3>
+        <ResponsiveContainer width="100%" height={260}>
+          <LineChart data={data} {...common}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis domain={['auto', 'auto']} />
+            <Tooltip />
+            <Legend />
+            <ReferenceArea y1={t.salt[0]} y2={t.salt[1]} fill="blue" fillOpacity={0.12} />
+            <Line type="monotone" dataKey="salt" name="Salt" dot={false} />
+            {showAverages && <Line type="monotone" dataKey="saltAvg7" name="Salt (7d avg)" strokeDasharray="5 5" dot={false} />}
+          </LineChart>
+        </ResponsiveContainer>
       </div>
-    </section>
+    </div>
   );
 }

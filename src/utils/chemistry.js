@@ -1,11 +1,26 @@
 // src/utils/chemistry.js
 
-// ---------- Targets (tune to your pool) ----------
+// ---------- Defaults (tune to your region if desired) ----------
 export const TARGETS = {
   ph: [7.2, 7.6],
   chlorine: [1.0, 3.0], // ppm
   salt: [3000, 4500],   // ppm
 };
+
+// Convert settings -> targets, falling back to defaults where missing/invalid
+export function targetsFromSettings(settings) {
+  const s = settings || {};
+  const pick = (lo, hi, defPair) => {
+    const a = Number(lo), b = Number(hi);
+    if (Number.isFinite(a) && Number.isFinite(b) && a < b) return [a, b];
+    return defPair;
+  };
+  return {
+    ph:       pick(s.phMin, s.phMax, TARGETS.ph),
+    chlorine: pick(s.chlorineMin, s.chlorineMax, TARGETS.chlorine),
+    salt:     pick(s.saltMin, s.saltMax, TARGETS.salt),
+  };
+}
 
 // ---------- Small helpers ----------
 const toNum = (v) => (v === '' || v == null ? NaN : Number(v));
@@ -28,48 +43,25 @@ export function kgSaltToRaise(deltaPpm, volumeL) {
   return (deltaPpm * volumeL) / 1_000_000; // kg
 }
 
-/**
- * Liquid chlorine (NaOCl) fallback:
- * grams of available chlorine required = Δppm * Volume(L) / 1000
- * available chlorine per liter ≈ strengthPct * 10 (e.g., 12.5% → ~125 g/L)
- * liters product = gramsNeeded / gramsPerLiter
- */
+/** Liquid chlorine fallback (for shock/top-ups) */
 export function litersLiquidChlorineToRaise(deltaPpm, volumeL, strengthPct = 12.5) {
   if (!isFiniteNum(deltaPpm) || !isFiniteNum(volumeL) || deltaPpm <= 0 || volumeL <= 0) return 0;
-  const gramsNeeded = (deltaPpm * volumeL) / 1000; // g of available chlorine
+  const gramsNeeded = (deltaPpm * volumeL) / 1000; // g available chlorine
   const gramsPerLiter = strengthPct * 10;          // ≈ g/L
-  return gramsNeeded / gramsPerLiter;              // liters of product
+  return gramsNeeded / gramsPerLiter;              // liters product
 }
 
-/**
- * Helpers for salt-chlorinator production math.
- * - rating_g_per_hr: grams of chlorine per hour at 100%
- * - pumpHours: hours/day the pump/chlorinator runs
- * - percent: current output percent (0..100)
- */
+/** Chlorinator production helpers */
 export function gramsPerDayAtPercent(rating_g_per_hr, pumpHours, percent) {
   if (![rating_g_per_hr, pumpHours, percent].every(isFiniteNum)) return 0;
-  return rating_g_per_hr * pumpHours * Math.max(0, Math.min(100, percent)) / 100;
+  return (rating_g_per_hr * pumpHours * Math.max(0, Math.min(100, percent))) / 100;
 }
 export function ppmFromGrams(volumeL, grams) {
   if (!isFiniteNum(volumeL) || volumeL <= 0 || !isFiniteNum(grams) || grams <= 0) return 0;
-  // grams to ppm: g * 1000 / L
-  return (grams * 1000) / volumeL;
+  return (grams * 1000) / volumeL; // grams -> ppm
 }
 
-/**
- * Recommend chlorinator output and/or extra hours to deliver Δppm in a day.
- * Inputs:
- *   deltaPpm (needed increase), volumeL, rating_g_per_hr, pumpHours, currentPercent (optional)
- * Returns:
- *   {
- *     neededGrams, neededPpm,
- *     currentGramsPerDay, currentPpmPerDay, // if currentPercent provided
- *     suggestedPercent, // % across existing pumpHours
- *     extraHours,       // if suggestedPercent > 100, additional hours at 100%
- *     feasible          // true if suggestedPercent <= 100
- *   }
- */
+/** Recommend chlorinator % / extra hours for Δppm today */
 export function recommendChlorinatorAdjustment({
   deltaPpm,
   volumeL,
@@ -90,49 +82,38 @@ export function recommendChlorinatorAdjustment({
   if (![deltaPpm, volumeL, rating_g_per_hr, pumpHours].every(isFiniteNum)) return out;
   if (deltaPpm <= 0 || volumeL <= 0 || rating_g_per_hr <= 0 || pumpHours <= 0) return out;
 
-  const neededGrams = (deltaPpm * volumeL) / 1000; // grams to add
+  const neededGrams = (deltaPpm * volumeL) / 1000;
   out.neededGrams = neededGrams;
 
   const gramsPerDay100 = rating_g_per_hr * pumpHours;
 
-  // If we know current %, describe current production too
   if (isFiniteNum(currentPercent)) {
     out.currentGramsPerDay = gramsPerDayAtPercent(rating_g_per_hr, pumpHours, currentPercent);
     out.currentPpmPerDay = ppmFromGrams(volumeL, out.currentGramsPerDay);
   }
 
-  // Percent that would achieve the needed grams over existing pump hours
   const pct = (neededGrams / gramsPerDay100) * 100;
   out.suggestedPercent = pct;
   out.feasible = pct <= 100;
 
   if (!out.feasible) {
-    // Need extra hours at 100% to deliver shortfall
     const shortfall = neededGrams - gramsPerDay100;
     out.extraHours = shortfall > 0 ? shortfall / rating_g_per_hr : 0;
   }
-
   return out;
 }
 
 // ---------- Advisories ----------
-/**
- * Build advisories from a single reading.
- * Returns { items: [{id,title,detail,severity}], overall: 'ok'|'info'|'warn'|'crit' }
- * Settings may include:
- *   poolVolumeL, chlorineStrengthPct,
- *   saltPoolMode, chlorinatorRated_g_per_hr, dailyPumpHours, currentOutputPercent
- */
-export function buildAdvisories(reading, targets = TARGETS, settings = {}) {
+export function buildAdvisories(reading, targets, settings = {}) {
+  const t = targets || TARGETS;
   if (!reading) return { items: [], overall: 'ok' };
 
   const poolVolumeL = toNum(settings.poolVolumeL);
   const chlorineStrengthPct = toNum(settings.chlorineStrengthPct) || 12.5;
-
   const saltPoolMode = !!settings.saltPoolMode;
-  const cellRate = toNum(settings.chlorinatorRated_g_per_hr);   // g/hr @100%
-  const pumpHours = toNum(settings.dailyPumpHours);             // hrs/day
-  const outPct = toNum(settings.currentOutputPercent);          // %
+  const cellRate = toNum(settings.chlorinatorRated_g_per_hr);
+  const pumpHours = toNum(settings.dailyPumpHours);
+  const outPct = toNum(settings.currentOutputPercent);
 
   const items = [];
   let overall = 'ok';
@@ -142,25 +123,17 @@ export function buildAdvisories(reading, targets = TARGETS, settings = {}) {
   };
 
   // pH
-  const phC = classify(reading.ph, targets.ph);
+  const phC = classify(reading.ph, t.ph);
   if (phC.state === 'low') {
-    items.push({
-      id: 'ph-low',
-      title: 'pH is low',
-      detail: 'Raise pH slightly. Reduce acid dosing and/or aerate water. Target 7.2–7.6.',
-      severity: 'warn',
-    }); bump('warn');
+    items.push({ id: 'ph-low', title: 'pH is low', detail: 'Raise pH slightly. Reduce acid dosing and/or aerate water. Target range applies.', severity: 'warn' });
+    bump('warn');
   } else if (phC.state === 'high') {
-    items.push({
-      id: 'ph-high',
-      title: 'pH is high',
-      detail: 'Lower pH with a small acid adjustment. Re-test after 30–60 minutes. Target 7.2–7.6.',
-      severity: 'warn',
-    }); bump('warn');
+    items.push({ id: 'ph-high', title: 'pH is high', detail: 'Lower pH with a small acid adjustment. Re-test after 30–60 minutes.', severity: 'warn' });
+    bump('warn');
   }
 
-  // Chlorine (Salt-pool first)
-  const clC = classify(reading.chlorine, targets.chlorine);
+  // Chlorine
+  const clC = classify(reading.chlorine, t.chlorine);
   if (clC.state === 'low') {
     if (saltPoolMode && [poolVolumeL, cellRate, pumpHours].every(isFiniteNum) && poolVolumeL > 0) {
       const rec = recommendChlorinatorAdjustment({
@@ -170,42 +143,34 @@ export function buildAdvisories(reading, targets = TARGETS, settings = {}) {
         pumpHours,
         currentPercent: isFiniteNum(outPct) ? outPct : undefined,
       });
-
       let detail = '';
-
-      // Add a short context line if we know current output
       if (isFiniteNum(outPct)) {
-        const currPpm = round(rec.currentPpmPerDay || 0, 2);
-        detail += `Current production ≈ ${currPpm} ppm/day @ ${round(outPct,0)}% for ${round(pumpHours,1)}h. `;
+        detail += `Current production ≈ ${round(rec.currentPpmPerDay || 0, 2)} ppm/day @ ${round(outPct,0)}% for ${round(pumpHours,1)}h. `;
       }
-
       if (rec.feasible) {
         if (isFiniteNum(outPct)) {
           const inc = Math.max(0, rec.suggestedPercent - outPct);
-          detail += `Increase chlorinator to ~${round(rec.suggestedPercent, 0)}% (≈ +${round(inc, 0)}%) for the next ${round(pumpHours, 1)}h run.`;
+          detail += `Increase chlorinator to ~${round(rec.suggestedPercent,0)}% (≈ +${round(inc,0)}%) for the next ${round(pumpHours,1)}h run.`;
         } else {
-          detail += `Set chlorinator to ~${round(rec.suggestedPercent, 0)}% for the next ${round(pumpHours, 1)}h run.`;
+          detail += `Set chlorinator to ~${round(rec.suggestedPercent,0)}% for the next ${round(pumpHours,1)}h run.`;
         }
       } else {
         const extra = Math.max(0.5, round(rec.extraHours, 1));
-        detail += `Run 100% for your usual ${round(pumpHours, 1)}h, then add ~${extra}h extra today (BOOST).`;
+        detail += `Run 100% for your usual ${round(pumpHours,1)}h, then add ~${extra}h extra today (BOOST).`;
       }
-
-      detail += ' Target 1–3 ppm.';
-      items.push({ id: 'cl-low', title: 'Chlorine is low', detail, severity: 'crit' });
+      items.push({ id: 'cl-low', title: 'Chlorine is low', detail: `${detail}`, severity: 'crit' });
       bump('crit');
     } else {
-      // Fallback: liquid chlorine estimate when salt inputs are incomplete
-      let detail = 'Increase chlorinator output or run-time today. Target 1–3 ppm.';
+      let detail = 'Increase chlorinator output or run-time today.';
       if (isFiniteNum(poolVolumeL) && poolVolumeL > 0) {
         const L = litersLiquidChlorineToRaise(clC.delta, poolVolumeL, chlorineStrengthPct);
-        if (L > 0) detail += ` (OR add ≈ ${round(L, 2)} L of ${chlorineStrengthPct}% liquid chlorine)`;
+        if (L > 0) detail += ` (OR add ≈ ${round(L,2)} L of ${chlorineStrengthPct}% liquid chlorine)`;
       }
       items.push({ id: 'cl-low', title: 'Chlorine is low', detail, severity: 'crit' });
       bump('crit');
     }
   } else if (clC.state === 'high') {
-    let detail = 'Dial chlorinator output down or shorten run-time. Allow levels to drift to 1–3 ppm.';
+    let detail = 'Dial chlorinator output down or shorten run-time.';
     if (saltPoolMode && isFiniteNum(outPct)) {
       const newPct = Math.max(0, outPct - 10);
       detail = `Reduce chlorinator from ${round(outPct,0)}% to ~${newPct}% and/or reduce run-time.`;
@@ -215,22 +180,17 @@ export function buildAdvisories(reading, targets = TARGETS, settings = {}) {
   }
 
   // Salt
-  const saltC = classify(reading.salt, targets.salt);
+  const saltC = classify(reading.salt, t.salt);
   if (saltC.state === 'low') {
-    let detail = 'Add pool salt gradually and re-test. Manufacturer typically targets ~3500–4000 ppm.';
+    let detail = 'Add pool salt gradually and re-test.';
     if (isFiniteNum(poolVolumeL) && poolVolumeL > 0) {
       const kg = kgSaltToRaise(saltC.delta, poolVolumeL);
-      if (kg > 0) detail += ` (≈ add ${round(kg, 1)} kg of pool salt)`;
+      if (kg > 0) detail += ` (≈ add ${round(kg,1)} kg of pool salt)`;
     }
     items.push({ id: 'salt-low', title: 'Salt is low', detail, severity: 'warn' });
     bump('warn');
   } else if (saltC.state === 'high') {
-    items.push({
-      id: 'salt-high',
-      title: 'Salt is high',
-      detail: 'Partially dilute with fresh water and re-test. Keep within the recommended range for your cell.',
-      severity: 'info',
-    });
+    items.push({ id: 'salt-high', title: 'Salt is high', detail: 'Partially dilute with fresh water and re-test.', severity: 'info' });
     bump('info');
   }
 
@@ -271,6 +231,5 @@ export function withMovingAverages(data, n = 7) {
       saltAvg7: denom ? sums.salt / denom : NaN,
     });
   }
-
   return out;
 }
