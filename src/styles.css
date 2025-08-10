@@ -1,287 +1,219 @@
-/* --- Theme & tokens ------------------------------------------------------ */
-:root {
-  --radius: 12px;
-  --pad: 12px;
-  --gap: 12px;
+/* =========================
+   Pool App — Global Styles
+   ========================= */
 
-  --teal: #0f766e;
-  --teal-600: #0b5e58;
+:root{
+  --bg: #f4fafb;
   --ink: #0f172a;
-  --muted: #64748b;
-
-  --border: #d6dee6;               /* stronger than before for contrast */
-  --bg-soft: rgba(0, 0, 0, 0.03);
-  --card: #ffffff;
+  --muted: #475569;
+  --border: #e5eaef;
+  --panel: #ffffff;
+  --brand: #0ea5e9;
+  --brand-600:#0284c7;
+  --ok: #16a34a;
+  --warn:#f59e0b;
+  --danger:#ef4444;
 }
 
-/* Ensure background extends full height of scroll */
-html, body, #root {
-  min-height: 100%;
-  height: auto;
-  background: #eef8f7; /* subtle pool vibe */
-}
+*{ box-sizing: border-box; }
+html,body,#root{ height:100%; }
 
-body {
-  margin: 0;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+body{
+  margin:0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Helvetica, Arial;
   color: var(--ink);
+  background:
+    radial-gradient(1000px 400px at 8% -100px, rgba(14,165,233,.08), transparent 60%),
+    radial-gradient(800px 300px at 100% -120px, rgba(22,163,74,.06), transparent 60%),
+    var(--bg);
 }
 
-/* --- Page container ------------------------------------------------------ */
-.container {
-  max-width: 1100px;
-  margin: 16px auto;
-  padding: 16px;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 6px 24px rgba(0,0,0,0.06);
-  box-sizing: border-box;
+/* Layout */
+.container{
+  width: min(1100px, 100%);
+  margin: 0 auto;
+  padding: 20px 16px 40px;
 }
+h1{ font-size: 44px; line-height: 1.1; margin: 8px 0 16px; color:#065f46; }
+h3{ margin: 16px 0 10px; }
 
-/* --- Headings ------------------------------------------------------------ */
-h1 {
-  font-size: clamp(28px, 4vw, 56px);
-  line-height: 1.1;
-  margin: 8px 0 8px;
-  color: #065f46; /* deep teal */
-}
-h3 { margin: 6px 0 8px; }
-
-/* --- Sections ------------------------------------------------------------ */
-.section { margin: 16px 0; }
-
-/* --- Date range controls ------------------------------------------------- */
-/* Layout: Row 1 = Start | End, Row 2 = Preset | Apply */
-.date-range {
-  display: grid;
-  gap: var(--gap);
-  grid-template-columns: 1fr; /* mobile default: stack */
-  align-items: end;
-  margin: 12px 0;
-}
-
-.date-range .card {
-  background: var(--bg-soft);
-  border-radius: var(--radius);
-  padding: var(--pad);
-}
-
-.date-range label {
-  display: block;
-  font-size: 12px;
-  color: var(--muted);
-  margin-bottom: 6px;
-}
-
-/* Inputs + selects */
-.date-range input[type="date"],
-.date-range select {
-  width: 100%;
-  box-sizing: border-box;
-  appearance: none;
-  background: var(--card);
-  color: var(--ink);
-  padding: 10px 12px;
+.section{
+  background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  outline: none;
-  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+  border-radius: 14px;
+  padding: 14px;
+  margin: 12px 0;
+  box-shadow: 0 10px 24px rgba(15,23,42,.05);
 }
 
-/* Hover/focus states */
-.date-range input[type="date"]:hover,
-.date-range select:hover {
-  border-color: #c7d0da;
+.chart-card{ padding: 10px 12px 4px; }
+
+/* Auth status row */
+.auth-status{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  color:var(--muted); margin-bottom:6px;
 }
-.date-range input[type="date"]:focus,
-.date-range select:focus {
-  border-color: var(--teal);
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
-  background: #fff;
+.auth-status .chip{
+  display:inline-flex; align-items:center; gap:6px;
+  height:34px; padding:6px 12px;
+  border:1px solid var(--border); border-radius:999px;
+  background:#eef2f7; color:var(--ink); text-decoration:none;
+}
+.auth-status .chip.danger{
+  background:#fee2e2; border-color:#fecaca; color:#7f1d1d;
 }
 
-/* Autofill & calendar icon visibility */
-.date-range input[type="date"]:-webkit-autofill,
-.date-range select:-webkit-autofill {
-  -webkit-text-fill-color: var(--ink) !important;
-  transition: background-color 9999s ease-in-out 0s;
-}
-.date-range input[type="date"]::-webkit-calendar-picker-indicator {
-  opacity: .7;
-  cursor: pointer;
-}
-.date-range input[type="date"]::-webkit-calendar-picker-indicator:hover {
-  opacity: 1;
-}
+/* =========================
+   Unified Form Controls
+   (used by Settings, DateRange, LogEntryForm, Admin)
+   ========================= */
 
-/* Actions (Apply button container) */
-.date-range .actions {
-  display: flex;
-  align-items: flex-end; /* align button with inputs */
-  gap: 8px;
-}
-
-/* --- Buttons ------------------------------------------------------------- */
-button {
-  padding: 9px 14px;
-  border: 0;
-  border-radius: 10px;
-  background: var(--teal);
-  color: #fff;
-  cursor: pointer;
-  transition: background-color .15s ease, transform .02s ease;
-}
-button:hover { background: var(--teal-600); }
-button:active { transform: translateY(1px); }
-button:disabled { opacity: .6; cursor: default; }
-button.secondary { background: #e2e8f0; color: var(--ink); }
-
-/* --- Charts -------------------------------------------------------------- */
-.chart-card {
+/* Base controls */
+input[type="text"],
+input[type="number"],
+input[type="date"],
+input[type="email"],
+input[type="search"],
+select,
+textarea{
   width: 100%;
-  height: auto;
-  background: var(--bg-soft);
-  border-radius: var(--radius);
-  padding: var(--pad);
-  box-sizing: border-box;
-}
-
-/* Extra breathing room between chart drawing area and card edges */
-.chart-inner {
-  padding: 0 12px; /* horizontal padding for the plot area */
-  box-sizing: border-box;
-  height: 100%;
-}
-
-/* --- Tables -------------------------------------------------------------- */
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; }
-th, td {
-  text-align: left;
-  padding: 8px 6px;
-  border-bottom: 1px solid #eee;
-}
-
-/* --- Responsive breakpoints --------------------------------------------- */
-/* Tablet/desktop: two columns per row
-   Row 1: Start | End
-   Row 2: Preset | Apply */
-@media (min-width: 560px) {
-  .date-range {
-    grid-template-columns: 1fr 1fr;
-    grid-auto-flow: row;
-  }
-}
-
-/* Optional: widen container slightly on big screens */
-@media (min-width: 1200px) {
-  .container { max-width: 1200px; }
-}
-
-/* Let the layout breathe across device widths */
-.container {
-  width: 100%;
-  max-width: 1200px;                 /* desktop cap */
-  margin-inline: auto;
-  padding-inline: clamp(12px, 4vw, 24px);
-}
-
-/* On small screens (portrait or landscape), remove the desktop cap */
-@media (max-width: 900px) {
-  .container {
-    max-width: 100%;
-    border-radius: 0;                /* optional: full-bleed look */
-    margin: 0;
-    padding-inline: clamp(12px, 4vw, 16px);
-  }
-}
-
-/* Landscape phones often have short height; tighten vertical spacing */
-@media (orientation: landscape) and (max-height: 480px) {
-  .section { margin: 10px 0; }
-  h1 { font-size: clamp(22px, 4vw, 34px); }
-  .chart-card { padding: 8px; }
-  .chart-inner { padding: 0 8px; }
-}
-
-/* Advisory list tweaks (optional) */
-.section ul { margin: 0; padding-left: 18px; }
-.section li { line-height: 1.35; }
-
-/* --- Date range controls layout & alignment --- */
-.date-range-controls { display: grid; gap: 12px; }
-
-.date-range-controls .date-grid.fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-  align-items: end;
-}
-
-.date-range-controls .date-grid.actions {
-  display: grid;
-  grid-template-columns: 1fr auto; /* Preset | Actions */
-  gap: 12px;
-  align-items: end;
-}
-
-@media (max-width: 640px) {
-  .date-range-controls .date-grid.actions { grid-template-columns: 1fr; }
-}
-
-/* Consistent control height + tidy alignment */
-.date-range-controls input[type="date"],
-.date-range-controls select,
-.date-range-controls button {
   height: 44px;
-}
-
-.date-range-controls .date-field { display: grid; gap: 6px; }
-.date-range-controls .date-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-start;
-}
-
-/* Admin page helpers */
-.admin-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-  align-items: end;
-}
-.admin-field { display: grid; gap: 6px; }
-.admin-field input {
-  height: 44px;
+  padding: 10px 12px;
+  color: var(--ink);
   background: #fff;
   border: 1px solid #d6dee6;
   border-radius: 10px;
-  padding: 10px 12px;
-  color: #0f172a;
+  outline: none;
+  box-shadow: inset 0 0 0 0 rgba(0,0,0,0);
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  appearance: none; /* normalize selects */
 }
-.code-block {
-  border: 1px solid #e5eaef;
-  background: #f8fafc;
-  border-radius: 10px;
-  padding: 12px;
-  margin: 12px 0;
+
+textarea{ height: auto; min-height: 90px; resize: vertical; }
+
+/* Focus ring */
+input:focus,
+select:focus,
+textarea:focus{
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(14,165,233,.18);
 }
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  border: 1px solid #e5eaef;
-  border-radius: 999px;
-  background: #eef2f7;
-  color: #0f172a;
-  text-decoration: none;
-  height: 34px;
+
+/* Disabled state */
+input:disabled,
+select:disabled,
+textarea:disabled{
+  background: #f3f6f9;
+  color: #94a3b8;
+  cursor: not-allowed;
 }
-.chip.danger {
-  background: #fee2e2;
-  border-color: #fecaca;
-  color: #7f1d1d;
+
+/* Date & select inner icons (WebKit) */
+input[type="date"]::-webkit-calendar-picker-indicator{
+  filter: invert(25%);
+  opacity: .8;
 }
+select{
+  background-image: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M7 10l5 5 5-5' stroke='%23677389' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 36px;
+}
+
+/* Field/label helpers (used by form-grid/date-field/admin-field) */
+.field, .date-field, .admin-field{ display:grid; gap:6px; }
+.field > span,
+.date-field > label,
+.admin-field > span,
+label > span{
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Grids used across pages */
+.form-grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
+  gap: 12px;
+}
+
+/* Date range controls layout & alignment */
+.date-range-controls{ display:grid; gap:12px; }
+.date-range-controls .date-grid.fields{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
+  gap:12px; align-items:end;
+}
+.date-range-controls .date-grid.actions{
+  display:grid;
+  grid-template-columns: 1fr auto; /* Preset | Actions */
+  gap:12px; align-items:end;
+}
+.date-range-controls .date-actions{
+  display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:flex-start;
+}
+@media (max-width:640px){
+  .date-range-controls .date-grid.actions{ grid-template-columns: 1fr; }
+}
+
+/* =========================
+   Buttons
+   ========================= */
+
+button{
+  height:44px; padding:10px 14px;
+  border-radius:10px; border:1px solid transparent;
+  background:#0d9488; color:#fff; font-weight:600;
+  cursor:pointer; transition: transform .02s ease, box-shadow .15s ease, background .15s ease;
+  box-shadow: 0 2px 0 rgba(0,0,0,.04);
+}
+button:hover{ background:#0f766e; }
+button:active{ transform: translateY(1px); }
+button.secondary{
+  background:#e8eef6; color:#0f172a; border-color:var(--border);
+}
+button.secondary:hover{ background:#dfe7f2; }
+
+/* Export toolbar checkbox alignment */
+label > input[type="checkbox"]{ transform: translateY(1px); }
+
+/* =========================
+   Charts
+   ========================= */
+.chart-grid{
+  display:grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+.chart-panel{ padding: 6px 6px 2px; }
+@media (min-width: 900px){
+  .chart-grid{ grid-template-columns: 1fr; } /* single column, but roomy */
+}
+
+/* Make charts breathe from the right edge */
+.recharts-wrapper{ margin-right: 8px; }
+
+/* =========================
+   Tables / History
+   ========================= */
+.table-wrap{ overflow:auto; }
+
+/* =========================
+   Admin helpers (invites)
+   ========================= */
+.admin-grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
+  gap:12px; align-items:end;
+}
+.code-block{
+  border:1px solid var(--border); background:#f8fafc;
+  border-radius:10px; padding:12px; margin:12px 0;
+}
+
+/* =========================
+   Misc
+   ========================= */
+a{ color:#2563eb; text-decoration:none; }
+a:hover{ text-decoration:underline; }
+code{ background:#f1f5f9; padding:2px 6px; border-radius:6px; }
