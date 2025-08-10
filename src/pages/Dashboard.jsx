@@ -7,10 +7,13 @@ import AuthStatus from '../components/AuthStatus';
 import DateRangeControls from '../components/DateRangeControls';
 import AdvisoriesPanel from '../components/AdvisoriesPanel';
 import SettingsPanel from '../components/SettingsPanel';
+import OfflineBanner from '../components/OfflineBanner';
 import useAuth from '../hooks/useAuth';
 import useRoleCheck from '../hooks/useRoleCheck';
 import { withMovingAverages, targetsFromSettings } from '../utils/chemistry';
 import { makeCsv, downloadText, exportXlsx } from '../utils/export';
+
+const LS_KEY = 'pool-app-cache:getReadings';
 
 export default function Dashboard() {
   const { user, authLoading } = useAuth();
@@ -25,22 +28,60 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [showAvg, setShowAvg] = useState(true);
-  const [settings, setSettings] = useState({}); // includes custom targets
+  const [settings, setSettings] = useState({});
+  const [offlineMode, setOfflineMode] = useState('hidden'); // 'hidden' | 'offline' | 'cached'
+
+  const cacheKey = useMemo(() => {
+    // Keep cache simple: we store the last successful payload regardless of range
+    return LS_KEY;
+  }, [range.startDate, range.endDate]);
+
+  const saveCache = (payload) => {
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), data: payload }));
+    } catch {}
+  };
+  const loadCache = () => {
+    try {
+      const raw = localStorage.getItem(cacheKey);
+      if (!raw) return null;
+      const { data } = JSON.parse(raw);
+      return Array.isArray(data) ? data : null;
+    } catch { return null; }
+  };
 
   const fetchReadings = async ({ startDate, endDate }) => {
     setLoading(true); setErr('');
+    setOfflineMode('hidden');
     try {
       const params = new URLSearchParams();
       if (startDate) params.set('startDate', asISO(startDate));
       if (endDate) params.set('endDate', asISO(endDate));
       params.set('limit', '365');
-      const res = await fetch(`/api/getReadings?${params.toString()}`, { credentials: 'include' });
+
+      const req = new Request(`/api/getReadings?${params.toString()}`, { credentials: 'include' });
+      let data;
+      // Network-first
+      const res = await fetch(req);
       if (!res.ok) throw new Error(`Fetch failed ${res.status}`);
-      const data = await res.json();
+      data = await res.json();
       setReadings(Array.isArray(data) ? data : []);
-    } catch (e) { console.error(e); setErr('Failed to load readings.'); }
-    finally { setLoading(false); }
+      saveCache(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.warn('[Dashboard] fetch failed, falling back to cache:', e?.message || e);
+      const cached = loadCache();
+      if (cached) {
+        setReadings(cached);
+        setOfflineMode(navigator.onLine ? 'cached' : 'offline');
+      } else {
+        setErr('Failed to load readings.');
+        setOfflineMode(navigator.onLine ? 'hidden' : 'offline');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
+
   useEffect(() => { fetchReadings(range); /* eslint-disable-next-line */ }, [range.startDate, range.endDate]);
 
   const chartData = useMemo(() => {
@@ -113,13 +154,15 @@ export default function Dashboard() {
     await fetchReadings(range);
   };
 
-  // Build targets from settings for charts & advisories
   const targets = useMemo(() => targetsFromSettings(settings), [settings]);
 
   return (
     <div className="container">
       <AuthStatus />
       <h1>Pool Dashboard</h1>
+
+      {/* Offline/cached banner */}
+      <OfflineBanner mode={offlineMode} />
 
       <DateRangeControls value={range} onChange={setRange} />
 
@@ -134,10 +177,7 @@ export default function Dashboard() {
         </label>
       </div>
 
-      {/* Settings (includes target ranges) */}
       <SettingsPanel onChange={setSettings} />
-
-      {/* Advisories use custom targets + settings */}
       <AdvisoriesPanel latestReading={latest} settings={settings} />
 
       <div className="section chart-card">
