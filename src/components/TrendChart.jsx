@@ -13,7 +13,6 @@ const DEFAULT_TARGETS = {
 export default function TrendChart({ data, showAverages = true, targets }) {
   const t = normalizeTargets(targets || DEFAULT_TARGETS);
 
-  // domain helpers ensure the axis always spans the target band
   const makeDomain = (lo, hi, padLo = 0, padHi = 0) => ([
     (dataMin) => Math.min(isNum(dataMin) ? dataMin : lo, lo) - padLo,
     (dataMax) => Math.max(isNum(dataMax) ? dataMax : hi, hi) + padHi,
@@ -33,10 +32,9 @@ export default function TrendChart({ data, showAverages = true, targets }) {
             <YAxis domain={makeDomain(t.ph[0], t.ph[1], 0.05, 0.05)} />
             <Tooltip />
             <Legend />
-            {/* Band + boundary lines */}
-            <ReferenceArea y1={t.ph[0]} y2={t.ph[1]} fill="#f59e0b" fillOpacity={0.28} />
-            <ReferenceLine y={t.ph[0]} stroke="#f59e0b" strokeDasharray="4 4" />
-            <ReferenceLine y={t.ph[1]} stroke="#f59e0b" strokeDasharray="4 4" />
+            <ReferenceArea y1={t.ph[0]} y2={t.ph[1]} fill="#7c3aed" fillOpacity={0.18} />
+            <ReferenceLine y={t.ph[0]} stroke="#7c3aed" strokeDasharray="4 4" />
+            <ReferenceLine y={t.ph[1]} stroke="#7c3aed" strokeDasharray="4 4" />
 
             <Line type="monotone" dataKey="ph" name="pH" stroke="#7c3aed" dot={false} strokeWidth={2} />
             {showAverages && (
@@ -56,7 +54,7 @@ export default function TrendChart({ data, showAverages = true, targets }) {
             <YAxis domain={makeDomain(t.chlorine[0], t.chlorine[1], 0.1, 0.1)} />
             <Tooltip />
             <Legend />
-            <ReferenceArea y1={t.chlorine[0]} y2={t.chlorine[1]} fill="#22c55e" fillOpacity={0.24} />
+            <ReferenceArea y1={t.chlorine[0]} y2={t.chlorine[1]} fill="#16a34a" fillOpacity={0.18} />
             <ReferenceLine y={t.chlorine[0]} stroke="#16a34a" strokeDasharray="4 4" />
             <ReferenceLine y={t.chlorine[1]} stroke="#16a34a" strokeDasharray="4 4" />
 
@@ -78,7 +76,7 @@ export default function TrendChart({ data, showAverages = true, targets }) {
             <YAxis domain={makeDomain(t.salt[0], t.salt[1], 100, 100)} />
             <Tooltip />
             <Legend />
-            <ReferenceArea y1={t.salt[0]} y2={t.salt[1]} fill="#3b82f6" fillOpacity={0.20} />
+            <ReferenceArea y1={t.salt[0]} y2={t.salt[1]} fill="#2563eb" fillOpacity={0.18} />
             <ReferenceLine y={t.salt[0]} stroke="#2563eb" strokeDasharray="4 4" />
             <ReferenceLine y={t.salt[1]} stroke="#2563eb" strokeDasharray="4 4" />
 
