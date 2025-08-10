@@ -8,8 +8,8 @@ const badgeColors = {
   crit:  { bg: 'rgba(239,68,68,.18)',  fg: '#7f1d1d', label: 'Action' },
 };
 
-export default function AdvisoriesPanel({ latestReading, targets = TARGETS }) {
-  const adv = buildAdvisories(latestReading, targets);
+export default function AdvisoriesPanel({ latestReading, targets = TARGETS, settings }) {
+  const adv = buildAdvisories(latestReading, targets, settings || {});
   const tone = badgeColors[adv.overall] || badgeColors.ok;
 
   return (
@@ -36,6 +36,12 @@ export default function AdvisoriesPanel({ latestReading, targets = TARGETS }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {!!settings && !settings.poolVolumeL && (
+        <div style={{ marginTop: 10, fontSize: 12, color: '#64748b' }}>
+          Tip: set your pool volume in <em>Settings</em> to see exact dosage amounts.
+        </div>
       )}
     </div>
   );

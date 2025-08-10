@@ -6,6 +6,7 @@ import TrendChart from '../components/TrendChart';
 import AuthStatus from '../components/AuthStatus';
 import DateRangeControls from '../components/DateRangeControls';
 import AdvisoriesPanel from '../components/AdvisoriesPanel';
+import SettingsPanel from '../components/SettingsPanel';     // NEW
 import useAuth from '../hooks/useAuth';
 import useRoleCheck from '../hooks/useRoleCheck';
 import { withMovingAverages } from '../utils/chemistry';
@@ -84,7 +85,7 @@ export default function Dashboard() {
     return sorted[0];
   }, [readings]);
 
-  // --- Orientation/resize kick for Recharts on mobile ----------------------
+  // Orientation/resize kick for Recharts on mobile
   useEffect(() => {
     const kick = () =>
       requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
@@ -108,61 +109,41 @@ export default function Dashboard() {
     return `pool-readings_${s}_to_${e}`;
   }, [range.startDate, range.endDate]);
 
-  // Select only the columns we want in exports, and ensure order.
   const exportRows = useMemo(() => {
-    // Use the raw readings (not the withMovingAverages data) so the CSV is clean.
     const copy = [...readings].sort((a, b) => (a.date < b.date ? -1 : 1));
-    return copy.map((r) => ({
-      date: r.date,
-      ph: r.ph,
-      chlorine: r.chlorine,
-      salt: r.salt,
-    }));
+    return copy.map((r) => ({ date: r.date, ph: r.ph, chlorine: r.chlorine, salt: r.salt }));
   }, [readings]);
 
   const doExportCsv = () => {
     const csv = makeCsv(exportRows, ['date', 'ph', 'chlorine', 'salt']);
     downloadText(`${filenameBase}.csv`, csv, 'text/csv;charset=utf-8');
   };
-
   const doExportXlsx = async () => {
-    try {
-      await exportXlsx(`${filenameBase}.xlsx`, exportRows, 'Readings');
-    } catch (e) {
-      alert(e.message || 'Excel export failed. See console for details.');
-    }
+    try { await exportXlsx(`${filenameBase}.xlsx`, exportRows, 'Readings'); }
+    catch (e) { alert(e.message || 'Excel export failed. See console for details.'); }
   };
-
-  // Server-side CSV export using /api/exportCSV
   const doServerCsv = () => {
     const params = new URLSearchParams();
     if (range.startDate) params.set('startDate', range.startDate);
     if (range.endDate) params.set('endDate', range.endDate);
-    params.set('limit', '20000'); // optional: lift the cap for large exports
+    params.set('limit', '20000');
     window.location.href = `/api/exportCSV?${params.toString()}`;
   };
 
-  // --- Edit flow ------------------------------------------------------------
-  const [editing, setEditing] = useState(null); // null or a reading object
+  // --- Settings (local) -----------------------------------------------------
+  const [settings, setSettings] = useState({}); // { poolVolumeL, chlorineStrengthPct }
 
+  // --- Edit flow ------------------------------------------------------------
+  const [editing, setEditing] = useState(null);
   const handleEdit = (reading) => {
     setEditing(reading);
-    // Scroll to form (handy on small screens)
     setTimeout(() => {
       const el = document.getElementById('log-entry-form');
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 0);
   };
-
-  const handleSaved = async () => {
-    setEditing(null);
-    await fetchReadings(range);
-  };
-
-  const handleCancel = () => {
-    setEditing(null);
-  };
-
+  const handleSaved = async () => { setEditing(null); await fetchReadings(range); };
+  const handleCancel = () => setEditing(null);
   const handleDelete = async (r) => {
     const ok = window.confirm(`Delete reading for ${r.date}?`);
     if (!ok) return;
@@ -170,13 +151,9 @@ export default function Dashboard() {
     if (r.id) params.set('id', r.id);
     params.set('date', r.date);
     const res = await fetch(`/api/deleteReading?${params.toString()}`, {
-      method: 'DELETE',
-      credentials: 'include',
+      method: 'DELETE', credentials: 'include',
     });
-    if (!res.ok) {
-      alert('Delete failed.');
-      return;
-    }
+    if (!res.ok) { alert('Delete failed.'); return; }
     await fetchReadings(range);
   };
 
@@ -189,34 +166,20 @@ export default function Dashboard() {
 
       {/* Export toolbar */}
       <div className="section" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button onClick={doExportCsv} disabled={!exportRows.length}>
-          Export CSV
-        </button>
-        <button onClick={doExportXlsx} disabled={!exportRows.length} className="secondary">
-          Export Excel (.xlsx)
-        </button>
-        <button onClick={doServerCsv} disabled={!readings.length} className="secondary">
-          Export CSV (Server)
-        </button>
+        <button onClick={doExportCsv} disabled={!exportRows.length}>Export CSV</button>
+        <button onClick={doExportXlsx} disabled={!exportRows.length} className="secondary">Export Excel (.xlsx)</button>
+        <button onClick={doServerCsv} disabled={!readings.length} className="secondary">Export CSV (Server)</button>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
-          <input
-            type="checkbox"
-            checked={showAvg}
-            onChange={(e) => setShowAvg(e.target.checked)}
-          />
+          <input type="checkbox" checked={showAvg} onChange={(e) => setShowAvg(e.target.checked)} />
           Show 7-day averages
         </label>
       </div>
 
-      {loading && <div>Loading…</div>}
-      {err && <div style={{ color: 'red' }}>{err}</div>}
-      {!loading && !err && readings.length === 0 && (
-        <div style={{ margin: '8px 0', color: '#64748b' }}>
-          No readings in the selected date range.
-        </div>
-      )}
+      {/* Settings */}
+      <SettingsPanel onChange={setSettings} />
 
-      <AdvisoriesPanel latestReading={latest} />
+      {/* Advisories (uses settings to show dosages) */}
+      <AdvisoriesPanel latestReading={latest} settings={settings} />
 
       <div className="section chart-card">
         <TrendChart data={chartData} showAverages={showAvg} />
@@ -224,21 +187,12 @@ export default function Dashboard() {
 
       {canWrite && (
         <div className="section" id="log-entry-form">
-          <LogEntryForm
-            initialValue={editing}     // <-- edit mode when not null
-            onSaved={handleSaved}
-            onCancel={handleCancel}
-          />
+          <LogEntryForm initialValue={editing} onSaved={handleSaved} onCancel={handleCancel} />
         </div>
       )}
 
       <div className="section table-wrap">
-        <HistoryList
-          readings={readings}
-          canEdit={canWrite}
-          onEdit={handleEdit}        // <-- wire up Edit
-          onDelete={handleDelete}
-        />
+        <HistoryList readings={readings} canEdit={canWrite} onEdit={handleEdit} onDelete={handleDelete} />
       </div>
     </div>
   );
