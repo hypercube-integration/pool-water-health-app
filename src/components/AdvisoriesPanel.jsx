@@ -2,10 +2,10 @@
 import { TARGETS, buildAdvisories } from '../utils/chemistry';
 
 const badgeColors = {
-  ok:    { bg: 'rgba(16,185,129,.15)', fg: '#065f46', label: 'All good' },
-  info:  { bg: 'rgba(59,130,246,.15)', fg: '#1e3a8a', label: 'Info' },
-  warn:  { bg: 'rgba(245,158,11,.18)', fg: '#78350f', label: 'Attention' },
-  crit:  { bg: 'rgba(239,68,68,.18)',  fg: '#7f1d1d', label: 'Action' },
+  ok:   { bg: 'rgba(16,185,129,.15)', fg: '#065f46', label: 'All good' },
+  info: { bg: 'rgba(59,130,246,.15)', fg: '#1e3a8a', label: 'Info' },
+  warn: { bg: 'rgba(245,158,11,.18)', fg: '#78350f', label: 'Attention' },
+  crit: { bg: 'rgba(239,68,68,.18)',  fg: '#7f1d1d', label: 'Action' },
 };
 
 export default function AdvisoriesPanel({ latestReading, targets = TARGETS, settings }) {
@@ -15,10 +15,7 @@ export default function AdvisoriesPanel({ latestReading, targets = TARGETS, sett
   return (
     <div className="section" style={{ background: 'rgba(0,0,0,0.03)', borderRadius: 12, padding: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <span style={{
-          padding: '4px 8px', borderRadius: 999,
-          background: tone.bg, color: tone.fg, fontSize: 12, fontWeight: 600
-        }}>
+        <span style={{ padding: '4px 8px', borderRadius: 999, background: tone.bg, color: tone.fg, fontSize: 12, fontWeight: 600 }}>
           {tone.label}
         </span>
         <div style={{ opacity: .7, fontSize: 13 }}>
@@ -40,7 +37,7 @@ export default function AdvisoriesPanel({ latestReading, targets = TARGETS, sett
 
       {!!settings && !settings.poolVolumeL && (
         <div style={{ marginTop: 10, fontSize: 12, color: '#64748b' }}>
-          Tip: set your pool volume in <em>Settings</em> to see exact dosage amounts.
+          Tip: set your pool volume in <em>Settings</em> to see precise dosage recommendations.
         </div>
       )}
     </div>
