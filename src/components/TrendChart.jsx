@@ -1,6 +1,7 @@
 // src/components/TrendChart.jsx
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceArea,
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ReferenceArea, ReferenceLine,
 } from 'recharts';
 
 const DEFAULT_TARGETS = {
@@ -12,9 +13,13 @@ const DEFAULT_TARGETS = {
 export default function TrendChart({ data, showAverages = true, targets }) {
   const t = normalizeTargets(targets || DEFAULT_TARGETS);
 
-  const common = {
-    margin: { top: 10, right: 22, bottom: 0, left: 0 },
-  };
+  // domain helpers ensure the axis always spans the target band
+  const makeDomain = (lo, hi, padLo = 0, padHi = 0) => ([
+    (dataMin) => Math.min(isNum(dataMin) ? dataMin : lo, lo) - padLo,
+    (dataMax) => Math.max(isNum(dataMax) ? dataMax : hi, hi) + padHi,
+  ]);
+
+  const commonChartProps = { margin: { top: 10, right: 22, bottom: 0, left: 0 } };
 
   return (
     <div className="chart-grid">
@@ -22,23 +27,20 @@ export default function TrendChart({ data, showAverages = true, targets }) {
       <div className="chart-panel">
         <h3>pH</h3>
         <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={data} {...common}>
+          <LineChart data={data} {...commonChartProps}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="date" />
-            <YAxis domain={['auto', 'auto']} />
+            <YAxis domain={makeDomain(t.ph[0], t.ph[1], 0.05, 0.05)} />
             <Tooltip />
             <Legend />
-            <ReferenceArea y1={t.ph[0]} y2={t.ph[1]} fill="#f59e0b" fillOpacity={0.18} />
+            {/* Band + boundary lines */}
+            <ReferenceArea y1={t.ph[0]} y2={t.ph[1]} fill="#f59e0b" fillOpacity={0.28} />
+            <ReferenceLine y={t.ph[0]} stroke="#f59e0b" strokeDasharray="4 4" />
+            <ReferenceLine y={t.ph[1]} stroke="#f59e0b" strokeDasharray="4 4" />
+
             <Line type="monotone" dataKey="ph" name="pH" stroke="#7c3aed" dot={false} strokeWidth={2} />
             {showAverages && (
-              <Line
-                type="monotone"
-                dataKey="phAvg7"
-                name="pH (7d avg)"
-                stroke="#7c3aed"
-                strokeDasharray="5 5"
-                dot={false}
-              />
+              <Line type="monotone" dataKey="phAvg7" name="pH (7d avg)" stroke="#7c3aed" strokeDasharray="5 5" dot={false} />
             )}
           </LineChart>
         </ResponsiveContainer>
@@ -48,23 +50,19 @@ export default function TrendChart({ data, showAverages = true, targets }) {
       <div className="chart-panel">
         <h3>Chlorine (ppm)</h3>
         <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={data} {...common}>
+          <LineChart data={data} {...commonChartProps}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="date" />
-            <YAxis domain={['auto', 'auto']} />
+            <YAxis domain={makeDomain(t.chlorine[0], t.chlorine[1], 0.1, 0.1)} />
             <Tooltip />
             <Legend />
-            <ReferenceArea y1={t.chlorine[0]} y2={t.chlorine[1]} fill="#22c55e" fillOpacity={0.16} />
+            <ReferenceArea y1={t.chlorine[0]} y2={t.chlorine[1]} fill="#22c55e" fillOpacity={0.24} />
+            <ReferenceLine y={t.chlorine[0]} stroke="#16a34a" strokeDasharray="4 4" />
+            <ReferenceLine y={t.chlorine[1]} stroke="#16a34a" strokeDasharray="4 4" />
+
             <Line type="monotone" dataKey="chlorine" name="Chlorine" stroke="#16a34a" dot={false} strokeWidth={2} />
             {showAverages && (
-              <Line
-                type="monotone"
-                dataKey="chlorineAvg7"
-                name="Chlorine (7d avg)"
-                stroke="#16a34a"
-                strokeDasharray="5 5"
-                dot={false}
-              />
+              <Line type="monotone" dataKey="chlorineAvg7" name="Chlorine (7d avg)" stroke="#16a34a" strokeDasharray="5 5" dot={false} />
             )}
           </LineChart>
         </ResponsiveContainer>
@@ -74,23 +72,19 @@ export default function TrendChart({ data, showAverages = true, targets }) {
       <div className="chart-panel">
         <h3>Salt (ppm)</h3>
         <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={data} {...common}>
+          <LineChart data={data} {...commonChartProps}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="date" />
-            <YAxis domain={['auto', 'auto']} />
+            <YAxis domain={makeDomain(t.salt[0], t.salt[1], 100, 100)} />
             <Tooltip />
             <Legend />
-            <ReferenceArea y1={t.salt[0]} y2={t.salt[1]} fill="#3b82f6" fillOpacity={0.14} />
+            <ReferenceArea y1={t.salt[0]} y2={t.salt[1]} fill="#3b82f6" fillOpacity={0.20} />
+            <ReferenceLine y={t.salt[0]} stroke="#2563eb" strokeDasharray="4 4" />
+            <ReferenceLine y={t.salt[1]} stroke="#2563eb" strokeDasharray="4 4" />
+
             <Line type="monotone" dataKey="salt" name="Salt" stroke="#2563eb" dot={false} strokeWidth={2} />
             {showAverages && (
-              <Line
-                type="monotone"
-                dataKey="saltAvg7"
-                name="Salt (7d avg)"
-                stroke="#2563eb"
-                strokeDasharray="5 5"
-                dot={false}
-              />
+              <Line type="monotone" dataKey="saltAvg7" name="Salt (7d avg)" stroke="#2563eb" strokeDasharray="5 5" dot={false} />
             )}
           </LineChart>
         </ResponsiveContainer>
@@ -99,15 +93,18 @@ export default function TrendChart({ data, showAverages = true, targets }) {
   );
 }
 
-/** Ensure targets are valid [min, max] arrays with sane fallbacks */
 function normalizeTargets(t) {
   const pick = (pair, def) => {
     const a = Number(pair?.[0]), b = Number(pair?.[1]);
-    return Number.isFinite(a) && Number.isFinite(b) && a < b ? [a, b] : def;
+    return isNum(a) && isNum(b) && a < b ? [a, b] : def;
   };
   return {
     ph: pick(t.ph, DEFAULT_TARGETS.ph),
     chlorine: pick(t.chlorine, DEFAULT_TARGETS.chlorine),
     salt: pick(t.salt, DEFAULT_TARGETS.salt),
   };
+}
+
+function isNum(n) {
+  return Number.isFinite(Number(n));
 }
