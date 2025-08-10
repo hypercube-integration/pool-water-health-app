@@ -20,8 +20,8 @@ export default function Admin() {
 
   const [swaName, setSwaName] = useState('');
   const [resourceGroup, setResourceGroup] = useState('');
-  const [tester, setTester] = useState(''); // github username or email
-  const [chosen, setChosen] = useState(['writer', 'editor', 'deleter', 'exporter']); // default recommended
+  const [tester, setTester] = useState('');
+  const [chosen, setChosen] = useState(['writer', 'editor', 'deleter', 'exporter']);
 
   useEffect(() => {
     try {
@@ -32,9 +32,7 @@ export default function Admin() {
   }, []);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify({ swaName, resourceGroup }));
-    } catch {}
+    try { localStorage.setItem(LS_KEY, JSON.stringify({ swaName, resourceGroup })); } catch {}
   }, [swaName, resourceGroup]);
 
   const toggleRole = (id) => {
@@ -70,12 +68,34 @@ export default function Admin() {
 
   return (
     <div className="container">
-      <h1>Admin</h1>
+      {/* Lightweight page header with back link */}
+      <div className="section" style={{
+        display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between', paddingTop: 10
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            className="secondary"
+            onClick={() => { window.location.hash = '#/'; }}
+            title="Back to dashboard"
+          >
+            ← Back to dashboard
+          </button>
+          <h1 style={{ margin: 0, fontSize: 22 }}>Admin</h1>
+        </div>
+        {/* Show who is signed in (small) */}
+        {user && (
+          <div style={{ fontSize: 13, color: '#475569' }}>
+            {user?.userDetails} &middot; {roles.map((r,i)=><span key={r}>{i? ', ' : ''}{r}</span>)}
+          </div>
+        )}
+      </div>
 
       {!user ? (
         <div className="section">You must sign in to view this page.</div>
       ) : !isAdmin ? (
-        <div className="section">You’re signed in as <strong>{user?.userDetails}</strong> but don’t have the <RoleBadge r="admin" /> role.</div>
+        <div className="section">
+          You’re signed in as <strong>{user?.userDetails}</strong> but don’t have the <RoleBadge r="admin" /> role.
+        </div>
       ) : (
         <>
           {/* Who am I */}
