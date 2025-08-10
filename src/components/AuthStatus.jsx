@@ -16,10 +16,9 @@ export default function AuthStatus() {
             Signed in as <strong>{user?.userDetails || 'user'}</strong>{' '}
             <span style={{ opacity: 0.7 }}>(github)</span>
           </span>
-          {isAdmin && <a className="chip" href="/#/admin">Admin</a>}
-          <a className="chip danger" href="/.auth/logout?post_logout_redirect_uri=/signed-out">
-            Sign out
-          </a>
+          {/* Show Admin link to all signed-in users; the Admin page gatekeeps the role */}
+          <a className="chip" href="/#/admin" title={isAdmin ? 'Admin' : 'Admin (requires admin role)'}>Admin</a>
+          <a className="chip danger" href="/.auth/logout?post_logout_redirect_uri=/signed-out">Sign out</a>
         </>
       ) : (
         <>
