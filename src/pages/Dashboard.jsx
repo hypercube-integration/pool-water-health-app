@@ -173,7 +173,3 @@ export default function Dashboard() {
 // --- small utils ---
 function loadJSON(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } }
 function saveJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
-function downloadText(name, text, type) {
-  const blob = new Blob([text], { type }); const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url);
-}
