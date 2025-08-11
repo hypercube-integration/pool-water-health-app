@@ -261,3 +261,28 @@ code{ background:#f1f5f9; padding:2px 6px; border-radius:6px; }
 .chart-shot{ padding: 8px; border: 1px dashed #d6dee6; border-radius: 10px; }
 
 .chart-shot img { width: 100%; height: auto; display: block; }
+
+/* Prevent background scroll when a modal is open */
+body.modal-open { overflow: hidden; }
+
+/* Backdrop covers screen and allows its own scroll if needed */
+.modal-backdrop{
+  position: fixed; inset: 0; background: rgba(15,23,42,.35);
+  display: grid; place-items: center; z-index: 1000; padding: 16px;
+  overflow: auto; /* if modal is taller than viewport */
+}
+
+/* Modal sizing & internal scrolling (content area scrolls) */
+.modal{
+  width: min(900px, 100%);
+  background: #fff; border: 1px solid #e5eaef; border-radius: 14px;
+  box-shadow: 0 30px 80px rgba(15,23,42,.25);
+  padding: 14px;
+  max-height: 90vh; /* key line */
+}
+.modal-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.modal-actions{ display:flex; gap:8px; justify-content:flex-end; padding-top: 8px; }
+
+/* Report area; will scroll inside modal */
+.report{ display:grid; gap:12px; }
+.chart-shot img { width: 100%; height: auto; display: block; }

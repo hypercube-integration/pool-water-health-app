@@ -12,30 +12,37 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
     return s[0];
   }, [readings]);
 
-  // When modal opens, make a lightweight snapshot of the chart for preview
+  // Body scroll lock + ESC to close
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.classList.add('modal-open');
+    document.body.style.overflow = 'hidden';
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.classList.remove('modal-open');
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open, onClose]);
+
+  // Chart preview image
   useEffect(() => {
     let cancelled = false;
     async function makePreview() {
-      if (!open) return;
-      setPreviewUrl(null);
-      if (!chartEl) return;
-
+      if (!open || !chartEl) return setPreviewUrl(null);
       try {
         const { default: html2canvas } = await import('html2canvas');
-        // Capture just the chart area (scale=1 for quick preview)
         const canvas = await html2canvas(chartEl, { backgroundColor: '#ffffff', scale: 1 });
         if (!cancelled) setPreviewUrl(canvas.toDataURL('image/png'));
-      } catch {
-        // Ignore preview errors; user can still generate full PDF
-      }
+      } catch { /* ignore */ }
     }
     makePreview();
     return () => { cancelled = true; };
   }, [open, chartEl]);
 
-  useEffect(() => {
-    if (!open) { setBusy(false); }
-  }, [open]);
+  useEffect(() => { if (!open) setBusy(false); }, [open]);
 
   if (!open) return null;
 
@@ -47,8 +54,6 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
         import('jspdf'),
       ]);
       const jsPDF = jsPDFmod.default;
-
-      // Build raster of the report container
       const node = wrapRef.current;
       const canvas = await html2canvas(node, { scale: 2, backgroundColor: '#ffffff' });
       const imgData = canvas.toDataURL('image/png');
@@ -56,17 +61,14 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
       const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
-
-      // Fit width with margins
       const ratio = canvas.height / canvas.width;
-      const imgW = pageW - 48; // 24pt margins
+      const imgW = pageW - 48; // margins
       const imgH = imgW * ratio;
       const x = 24, y = 24;
 
       if (imgH <= pageH - 48) {
         pdf.addImage(imgData, 'PNG', x, y, imgW, imgH, undefined, 'FAST');
       } else {
-        // Multi-page slice
         let curY = 0;
         while (curY < canvas.height) {
           const pageCanvas = document.createElement('canvas');
@@ -94,15 +96,20 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e)=>e.stopPropagation()}>
+    <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
+      <div
+        className="modal"
+        onClick={(e)=>e.stopPropagation()}
+        role="document"
+        style={{ display:'grid', gridTemplateRows:'auto 1fr auto', maxHeight:'90vh' }}
+      >
         <div className="modal-head">
           <h3 style={{ margin: 0 }}>Report preview</h3>
-          <button className="secondary" onClick={onClose}>Close</button>
+          <button className="secondary" onClick={onClose} aria-label="Close">Close</button>
         </div>
 
-        {/* Report content (this is what gets rasterized to PDF) */}
-        <div ref={wrapRef} className="report">
+        {/* Scrollable content area */}
+        <div ref={wrapRef} className="report" style={{ overflow:'auto' }}>
           <div className="report-header">
             <div>
               <div className="title">Pool Water Health</div>
@@ -155,7 +162,8 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
           </div>
         </div>
 
-        <div className="modal-actions">
+        {/* Sticky footer */}
+        <div className="modal-actions" style={{ position:'sticky', bottom:0, background:'#fff' }}>
           <button onClick={generate} disabled={busy}>{busy ? 'Generating…' : 'Generate PDF'}</button>
         </div>
       </div>
