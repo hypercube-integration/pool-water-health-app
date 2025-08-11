@@ -1,24 +1,33 @@
 // src/components/AuthStatus.jsx
-import useAuth from '../hooks/useAuth';
+import useAuth, { clearAuthCache } from '../hooks/useAuth';
 
 export default function AuthStatus() {
-  const { user, authLoading } = useAuth();
+  const { user, authLoading, staleOffline } = useAuth();
   const roles = user?.userRoles || [];
-  const isAdmin = roles.includes('admin');
+  const isSignedIn = !!user;
+
+  const doSignOut = () => {
+    // Only clear client cache after redirecting to logout (when online)
+    clearAuthCache();
+    window.location.href = '/.auth/logout?post_logout_redirect_uri=/signed-out';
+  };
 
   return (
     <div className="auth-status">
       {authLoading ? (
         <span>Checking sign-in…</span>
-      ) : user ? (
+      ) : isSignedIn ? (
         <>
           <span>
-            Signed in as <strong>{user?.userDetails || 'user'}</strong>{' '}
-            <span style={{ opacity: 0.7 }}>(github)</span>
+            {staleOffline ? 'Signed in (offline) as ' : 'Signed in as ' }
+            <strong>{user?.userDetails || 'user'}</strong>
+            <span style={{ opacity: 0.7 }}> ({user?.identityProvider || 'github'})</span>
           </span>
-          {/* Show Admin link to all signed-in users; the Admin page gatekeeps the role */}
-          <a className="chip" href="/#/admin" title={isAdmin ? 'Admin' : 'Admin (requires admin role)'}>Admin</a>
-          <a className="chip danger" href="/.auth/logout?post_logout_redirect_uri=/signed-out">Sign out</a>
+          <a className="chip" href="/#/">Dashboard</a>
+          <a className="chip" href="/#/admin">Admin</a>
+          <button className="chip danger" onClick={doSignOut} disabled={staleOffline} title={staleOffline ? 'Go online to fully sign out' : 'Sign out'}>
+            Sign out
+          </button>
         </>
       ) : (
         <>

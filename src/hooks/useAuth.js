@@ -1,33 +1,32 @@
 // src/hooks/useAuth.js
-// Efficient, shared auth state for the entire app.
-// - One network call on first use (per tab), then cached
-// - Soft refresh at most every 15 minutes, or when page becomes visible
-// - Multiple components reuse the same result; no duplicate fetches
-
 import { useEffect, useState } from 'react';
 
-// ---- module-scoped singleton state ----
-let cachedUser = null;
-let authLoadingGlobal = false;
+const LS_KEY = 'pool-auth:principal-v1';
+
+let cachedUser = loadLS();
+let authLoadingGlobal = !cachedUser;
 let lastFetch = 0;
 let inFlight = null;
+let staleOffline = false;
 const subscribers = new Set();
 
-const FRESH_MS = 15 * 60 * 1000; // 15 minutes
+const FRESH_MS = 15 * 60 * 1000; // 15 min
+
+function loadLS() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch { return null; }
+}
+function saveLS(user) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(user)); } catch {}
+}
 
 function notify() {
-  for (const fn of subscribers) {
-    try { fn({ user: cachedUser, authLoading: authLoadingGlobal }); } catch {}
-  }
+  const s = { user: cachedUser, authLoading: authLoadingGlobal, staleOffline };
+  for (const fn of subscribers) { try { fn(s); } catch {} }
 }
 
 async function fetchMe({ force = false } = {}) {
   const now = Date.now();
-  // Use cache if fresh
-  if (!force && cachedUser && now - lastFetch < FRESH_MS) {
-    return cachedUser;
-  }
-  // Reuse in-flight request
+  if (!force && cachedUser && now - lastFetch < FRESH_MS) return cachedUser;
   if (inFlight) return inFlight;
 
   authLoadingGlobal = true; notify();
@@ -36,12 +35,17 @@ async function fetchMe({ force = false } = {}) {
   const req = fetch(`/.auth/me?ts=${ts}`, { credentials: 'include', cache: 'no-store' })
     .then(res => res.json())
     .then(data => {
-      cachedUser = data?.clientPrincipal || null;
+      const principal = data?.clientPrincipal || null;
+      // Only update cache if we actually got something (may be null if logged out)
+      cachedUser = principal;
       lastFetch = Date.now();
+      staleOffline = false;
+      saveLS(cachedUser);
       return cachedUser;
     })
     .catch(() => {
-      // Keep whatever we had; don't thrash cache on failure
+      // Network fail → keep whatever we had; mark staleOffline
+      staleOffline = true;
       return cachedUser;
     })
     .finally(() => {
@@ -54,41 +58,33 @@ async function fetchMe({ force = false } = {}) {
   return req;
 }
 
-// Kick a gentle background refresh on visibility change (once per module)
 let bgHooked = false;
 function ensureBackgroundHooks() {
   if (bgHooked) return;
   bgHooked = true;
 
-  // When tab becomes visible, refresh if stale
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) fetchMe({ force: false });
   });
 
-  // Safety: periodic refresh (one timer for the tab)
-  setInterval(() => {
-    fetchMe({ force: false });
-  }, FRESH_MS);
+  setInterval(() => { fetchMe({ force: false }); }, FRESH_MS);
 }
 
-// ---- public API ----
 export default function useAuth() {
-  const [state, setState] = useState({ user: cachedUser, authLoading: !cachedUser });
+  const [state, setState] = useState({ user: cachedUser, authLoading: authLoadingGlobal, staleOffline });
 
   useEffect(() => {
     ensureBackgroundHooks();
 
-    // Subscribe to global changes
     const sub = (s) => setState(s);
     subscribers.add(sub);
 
-    // First load if we have no cache
     if (!cachedUser && !inFlight) {
+      // First ever load → try once; if it fails we still keep null (not signed in)
       fetchMe({ force: true });
     } else {
-      // Emit current immediately
-      sub({ user: cachedUser, authLoading: authLoadingGlobal });
-      // If stale, refresh in background
+      // Emit immediately with cached user (from LS), then soft refresh
+      sub({ user: cachedUser, authLoading: authLoadingGlobal, staleOffline });
       fetchMe({ force: false });
     }
 
@@ -98,7 +94,15 @@ export default function useAuth() {
   return state;
 }
 
-// Manual refresh you can call after sign-in/out flows, etc.
 export function refreshAuth() {
   return fetchMe({ force: true });
+}
+
+export function clearAuthCache() {
+  // Use this on explicit Sign out (online) only
+  cachedUser = null;
+  staleOffline = false;
+  saveLS(null);
+  lastFetch = 0;
+  notify();
 }
