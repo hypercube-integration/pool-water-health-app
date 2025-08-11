@@ -1,5 +1,5 @@
 // src/pages/Dashboard.jsx
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import LogEntryForm from '../components/LogEntryForm';
 import HistoryList from '../components/HistoryList';
 import TrendChart from '../components/TrendChart';
@@ -9,6 +9,7 @@ import AdvisoriesPanel from '../components/AdvisoriesPanel';
 import SettingsPanel from '../components/SettingsPanel';
 import OfflineBanner from '../components/OfflineBanner';
 import SyncStatus from '../components/SyncStatus';
+import ReportModal from '../components/ReportModal';
 import useAuth from '../hooks/useAuth';
 import useRoleCheck from '../hooks/useRoleCheck';
 import { withMovingAverages, targetsFromSettings } from '../utils/chemistry';
@@ -26,7 +27,7 @@ export default function Dashboard() {
   const { user } = useAuth();
   const canWrite = useRoleCheck(['writer', 'editor', 'admin']).has;
 
-  // --- Init from URL or localStorage
+  // URL/LS init
   const initFromUrlOrStorage = () => {
     const url = new URL(window.location.href);
     const qs = url.searchParams;
@@ -41,7 +42,6 @@ export default function Dashboard() {
   const [{ startDate, endDate, preset }, setRangeState] = useState(initFromUrlOrStorage().range);
   const [showAvg, setShowAvg] = useState(initFromUrlOrStorage().showAvg);
 
-  // Persist to URL + localStorage whenever these change
   useEffect(() => {
     const url = new URL(window.location.href);
     url.searchParams.set('start', startDate);
@@ -58,20 +58,17 @@ export default function Dashboard() {
     preset: r.preset || 'custom',
   });
 
-  // --- Offline queue lifecycle
+  // Offline queue lifecycle
   useEffect(() => {
     const cleanup = initOfflineQueue();
     const unsub = offlineSubscribe((evt) => {
-      if (evt.type === 'sync-end') {
-        // After a sync, refresh readings to show server truth
-        fetchReadings({ startDate, endDate });
-      }
+      if (evt.type === 'sync-end') fetchReadings({ startDate, endDate });
     });
     return () => { cleanup(); unsub(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- Data
+  // Data
   const [readings, setReadings] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
@@ -85,38 +82,30 @@ export default function Dashboard() {
       if (startDate) params.set('startDate', asISO(startDate));
       if (endDate) params.set('endDate', asISO(endDate));
       params.set('limit', '365');
-
       const res = await fetch(`/api/getReadings?${params.toString()}`, { credentials: 'include' });
       if (!res.ok) throw new Error(`Fetch failed ${res.status}`);
       const data = await res.json();
       setReadings(Array.isArray(data) ? data : []);
       saveJSON(LS_CACHE, Array.isArray(data) ? data : []);
-    } catch (e) {
+    } catch {
       const cached = loadJSON(LS_CACHE);
-      if (cached) {
-        setReadings(cached);
-        setOfflineMode(navigator.onLine ? 'cached' : 'offline');
-      } else {
-        setErr('Failed to load readings.');
-        setOfflineMode(navigator.onLine ? 'hidden' : 'offline');
-      }
-    } finally {
-      setLoading(false);
-    }
+      if (cached) { setReadings(cached); setOfflineMode(navigator.onLine ? 'cached' : 'offline'); }
+      else { setErr('Failed to load readings.'); setOfflineMode(navigator.onLine ? 'hidden' : 'offline'); }
+    } finally { setLoading(false); }
   };
   useEffect(() => { fetchReadings({ startDate, endDate }); /* eslint-disable-next-line */ }, [startDate, endDate]);
 
   const chartData = useMemo(() => {
     const coerce = (v) => (v === '' || v == null ? NaN : Number(v));
     const base = readings
-      .map((r) => ({ ...r, ph: coerce(r.ph), chlorine: coerce(r.chlorine), salt: coerce(r.salt) }))
-      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+      .map(r => ({ ...r, ph: coerce(r.ph), chlorine: coerce(r.chlorine), salt: coerce(r.salt) }))
+      .sort((a,b)=>a.date<b.date?-1: a.date>b.date?1:0);
     return withMovingAverages(base, 7);
   }, [readings]);
 
   const latest = useMemo(() => {
     if (!readings.length) return null;
-    const [first] = [...readings].sort((a, b) => (a.date > b.date ? -1 : 1));
+    const [first] = [...readings].sort((a,b)=>a.date>b.date?-1:1);
     return first;
   }, [readings]);
 
@@ -136,15 +125,14 @@ export default function Dashboard() {
 
   const filenameBase = useMemo(() => `pool-readings_${startDate}_to_${endDate}`, [startDate, endDate]);
   const exportRows = useMemo(() => {
-    const copy = [...readings].sort((a, b) => (a.date < b.date ? -1 : 1));
-    return copy.map((r) => ({ date: r.date, ph: r.ph, chlorine: r.chlorine, salt: r.salt }));
+    const copy = [...readings].sort((a,b)=>a.date<b.date?-1:1);
+    return copy.map(r => ({ date: r.date, ph: r.ph, chlorine: r.chlorine, salt: r.salt }));
   }, [readings]);
 
   const doExportCsv   = () => downloadText(`${filenameBase}.csv`, makeCsv(exportRows, ['date','ph','chlorine','salt']), 'text/csv;charset=utf-8');
   const doExportXlsx  = async () => { try { await exportXlsx(`${filenameBase}.xlsx`, exportRows, 'Readings'); } catch (e) { alert(e.message || 'Excel export failed.'); } };
   const doServerCsv   = () => { const p = new URLSearchParams({ startDate, endDate, limit: '20000' }); window.location.href = `/api/exportCSV?${p}`; };
 
-  // Editing & deletion
   const [editing, setEditing] = useState(null);
   const handleEdit = (reading) => {
     setEditing(reading);
@@ -152,25 +140,22 @@ export default function Dashboard() {
   };
   const handleSaved = async () => { setEditing(null); await fetchReadings({ startDate, endDate }); };
   const handleCancel = () => setEditing(null);
-
   const handleDelete = async (r) => {
     if (!window.confirm(`Delete reading for ${r.date}?`)) return;
-
-    // Server expects DELETE /api/deleteReading?id=...&date=...
     const params = new URLSearchParams();
     if (r.id) params.set('id', r.id);
     params.set('date', r.date);
     const url = `/api/deleteReading?${params.toString()}`;
-
     const result = await offlineApi.delete(url);
-    if (result.queued) {
-      alert('Delete queued (offline). It will sync when you’re online.');
-    }
-    // Optimistic refresh (if offline, you’ll still see cached data)
+    if (result.queued) alert('Delete queued (offline). It will sync when you’re online.');
     await fetchReadings({ startDate, endDate });
   };
 
   const targets = useMemo(() => targetsFromSettings(settings), [settings]);
+
+  // --- Report modal
+  const [reportOpen, setReportOpen] = useState(false);
+  const chartHostRef = useRef(null);
 
   return (
     <div className="container">
@@ -186,6 +171,7 @@ export default function Dashboard() {
         <button onClick={doExportCsv}  disabled={!exportRows.length}>Export CSV</button>
         <button onClick={doExportXlsx} disabled={!exportRows.length} className="secondary">Export Excel (.xlsx)</button>
         <button onClick={doServerCsv}  disabled={!readings.length} className="secondary">Export CSV (Server)</button>
+        <button onClick={() => setReportOpen(true)} className="secondary">PDF report</button>
         <label style={{ display:'flex', alignItems:'center', gap:8, marginLeft:'auto' }}>
           <input type="checkbox" checked={showAvg} onChange={(e)=>setShowAvg(e.target.checked)} />
           Show 7-day averages
@@ -195,7 +181,7 @@ export default function Dashboard() {
       <SettingsPanel onChange={setSettings} />
       <AdvisoriesPanel latestReading={latest} settings={settings} />
 
-      <div className="section chart-card">
+      <div ref={chartHostRef} className="section chart-card">
         <TrendChart data={chartData} showAverages={showAvg} targets={targets} />
       </div>
 
@@ -208,10 +194,19 @@ export default function Dashboard() {
       <div className="section table-wrap">
         <HistoryList readings={readings} canEdit={canWrite} onEdit={handleEdit} onDelete={handleDelete} />
       </div>
+
+      <ReportModal
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        readings={readings}
+        targets={targets}
+        range={{ startDate, endDate }}
+        chartEl={chartHostRef.current}
+      />
     </div>
   );
 }
 
-// --- small utils ---
+// utils
 function loadJSON(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } }
 function saveJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
