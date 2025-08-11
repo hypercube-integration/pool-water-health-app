@@ -12,7 +12,7 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
     return s[0];
   }, [readings]);
 
-  // Lock page scroll + Esc
+  // Lock background scroll + Esc to close
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -27,7 +27,7 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
     };
   }, [open, onClose]);
 
-  // Chart preview image
+  // Chart preview (small, quick)
   useEffect(() => {
     let cancelled = false;
     async function makePreview() {
@@ -36,7 +36,7 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
         const { default: html2canvas } = await import('html2canvas');
         const canvas = await html2canvas(chartEl, { backgroundColor: '#ffffff', scale: 1 });
         if (!cancelled) setPreviewUrl(canvas.toDataURL('image/png'));
-      } catch {}
+      } catch { /* ignore */ }
     }
     makePreview();
     return () => { cancelled = true; };
@@ -55,103 +55,68 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
       ]);
       const jsPDF = jsPDFmod.default;
 
-      // --- Clone report off-screen at natural height
+      // Clone the report off-screen at natural height (no scrolling)
       const source = wrapRef.current;
       const clone = source.cloneNode(true);
-      const w = Math.min(900, window.innerWidth - 32);
+      const targetWidthPx = Math.min(900, window.innerWidth - 32); // similar to modal width
       Object.assign(clone.style, {
-        position: 'fixed', left: '-100000px', top: '0',
-        width: `${w}px`, maxHeight: 'none', overflow: 'visible', height: 'auto',
-        background: '#ffffff', padding: source.style.padding || '0',
+        position: 'fixed',
+        left: '-100000px',
+        top: '0',
+        width: `${targetWidthPx}px`,
+        maxHeight: 'none',
+        overflow: 'visible',
+        height: 'auto',
+        background: '#ffffff',
+        padding: source.style.padding || '0',
       });
       document.body.appendChild(clone);
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 50)); // allow layout & fonts
 
-      // Collect "no-split" element boundaries (in CSS px)
-      const noSplitEls = Array.from(clone.querySelectorAll('.no-split'));
-      const protectedRangesCss = noSplitEls.map(el => {
-        const top = el.offsetTop;
-        const height = el.offsetHeight;
-        return { top, bottom: top + height };
-      });
-
-      // Render to canvas (scale=2)
+      // Render the full clone
       const canvas = await html2canvas(clone, {
         backgroundColor: '#ffffff',
-        scale: 2,
+        scale: 2,                 // crisp in PDF
         windowWidth: clone.scrollWidth,
         windowHeight: clone.scrollHeight,
         useCORS: true,
         removeContainer: true,
-        scrollX: 0, scrollY: 0,
+        scrollX: 0,
+        scrollY: 0,
       });
 
       clone.remove();
 
-      // Convert protected ranges to canvas pixel space
-      const scale = canvas.width / (clone ? clone.scrollWidth : w);
-      const protectedRanges = protectedRangesCss.map(r => ({
-        top: Math.round(r.top * scale),
-        bottom: Math.round(r.bottom * scale),
-      }));
+      // Decide orientation that fits better (portrait vs landscape)
+      const imgWpx = canvas.width;
+      const imgHpx = canvas.height;
+      const preferLandscape = imgWpx > imgHpx;
 
-      // --- Build PDF with page breaks aligned to boundaries
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+      const pdf = new jsPDF({
+        unit: 'pt',
+        format: 'a4',
+        orientation: preferLandscape ? 'landscape' : 'portrait',
+      });
+
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
       const margin = 24;
-      const imgW = pageW - margin * 2;
-      const slicePxPerPage = Math.floor((pageH - margin * 2) * (canvas.width / imgW));
-      const MIN_CHUNK = Math.floor(slicePxPerPage * 0.35); // avoid tiny pages
+      const maxW = pageW - margin * 2;
+      const maxH = pageH - margin * 2;
 
-      // Helper: find best break <= target that does NOT cut through a protected range
-      function adjustBreak(curY, targetY) {
-        let best = null;
-        // We prefer breaks exactly at the bottom of protected blocks
-        const candidates = [];
-        for (const r of protectedRanges) {
-          const b = r.bottom;
-          if (b > curY + MIN_CHUNK && b <= targetY) candidates.push(b);
-        }
-        candidates.sort((a,b)=>a-b);
-        best = candidates.length ? candidates[candidates.length - 1] : null;
+      // Compute scale to fit in one page
+      const scaleToWidth = maxW / imgWpx;
+      const scaleToHeight = maxH / imgHpx;
+      const scale = Math.min(scaleToWidth, scaleToHeight);
 
-        if (best != null) return best;
+      const drawW = imgWpx * scale;
+      const drawH = imgHpx * scale;
 
-        // If targetY cuts through a protected range, move up to its top
-        for (const r of protectedRanges) {
-          if (targetY > r.top && targetY < r.bottom) {
-            const moveUp = r.top;
-            if (moveUp > curY + MIN_CHUNK) return moveUp;
-            // If moving up would make page too short, try moving down to r.bottom (will overflow slightly)
-            return r.bottom;
-          }
-        }
-        return targetY;
-      }
+      const x = margin + (maxW - drawW) / 2;
+      const y = margin + (maxH - drawH) / 2;
 
-      let curY = 0;
-      let first = true;
-      while (curY < canvas.height) {
-        let target = Math.min(canvas.height, curY + slicePxPerPage);
-        target = adjustBreak(curY, target);
-        const sliceH = Math.min(canvas.height - curY, target - curY);
-
-        const pageCanvas = document.createElement('canvas');
-        pageCanvas.width = canvas.width;
-        pageCanvas.height = sliceH;
-        const ctx = pageCanvas.getContext('2d');
-        ctx.drawImage(canvas, 0, curY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
-
-        const pageImg = pageCanvas.toDataURL('image/png');
-        if (!first) pdf.addPage();
-        const pageImgH = (sliceH / canvas.width) * imgW;
-        pdf.addImage(pageImg, 'PNG', margin, margin, imgW, pageImgH, undefined, 'FAST');
-
-        first = false;
-        curY += sliceH;
-      }
+      const imgData = canvas.toDataURL('image/png');
+      pdf.addImage(imgData, 'PNG', x, y, drawW, drawH, undefined, 'FAST');
 
       const fname = `Pool-Report_${range?.startDate || 'start'}_to_${range?.endDate || 'end'}.pdf`;
       pdf.save(fname);
@@ -176,9 +141,9 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
           <button className="secondary" onClick={onClose} aria-label="Close">Close</button>
         </div>
 
-        {/* Scrollable report content */}
+        {/* Scrollable report content (for preview only) */}
         <div ref={wrapRef} className="report" style={{ overflow: 'auto' }}>
-          <div className="report-header no-split">
+          <div className="report-header">
             <div>
               <div className="title">Pool Water Health</div>
               <div className="sub">Summary report</div>
@@ -191,7 +156,7 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
           </div>
 
           <div className="report-grid">
-            <div className="report-card no-split">
+            <div className="report-card">
               <div className="card-title">Latest reading</div>
               {latest ? (
                 <ul className="kv">
@@ -203,7 +168,7 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
               ) : <div>No readings in range.</div>}
             </div>
 
-            <div className="report-card no-split">
+            <div className="report-card">
               <div className="card-title">Target ranges</div>
               {targets ? (
                 <ul className="kv">
@@ -215,7 +180,7 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
             </div>
           </div>
 
-          <div className="report-card no-split">
+          <div className="report-card">
             <div className="card-title">Trend chart</div>
             <div className="chart-shot">
               {previewUrl
@@ -224,7 +189,7 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
             </div>
           </div>
 
-          <div className="report-card no-split">
+          <div className="report-card">
             <div className="card-title">Notes</div>
             <p style={{ margin: 0, color: '#475569' }}>
               This report reflects the selected date range and your current target settings.
