@@ -8,11 +8,11 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
 
   const latest = useMemo(() => {
     if (!readings?.length) return null;
-    const s = [...readings].sort((a,b)=>a.date>b.date?-1:1);
+    const s = [...readings].sort((a, b) => (a.date > b.date ? -1 : 1));
     return s[0];
   }, [readings]);
 
-  // Body scroll lock + ESC to close
+  // Lock background scroll + Esc to close
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -27,11 +27,11 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
     };
   }, [open, onClose]);
 
-  // Chart preview image
+  // Generate a lightweight chart image for the preview
   useEffect(() => {
     let cancelled = false;
     async function makePreview() {
-      if (!open || !chartEl) return setPreviewUrl(null);
+      if (!open || !chartEl) { setPreviewUrl(null); return; }
       try {
         const { default: html2canvas } = await import('html2canvas');
         const canvas = await html2canvas(chartEl, { backgroundColor: '#ffffff', scale: 1 });
@@ -54,35 +54,68 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
         import('jspdf'),
       ]);
       const jsPDF = jsPDFmod.default;
-      const node = wrapRef.current;
-      const canvas = await html2canvas(node, { scale: 2, backgroundColor: '#ffffff' });
-      const imgData = canvas.toDataURL('image/png');
 
+      // --- Clone the scrolling report off-screen at natural height
+      const source = wrapRef.current;
+      const clone = source.cloneNode(true);
+      const w = Math.min(900, window.innerWidth - 32); // similar width to modal
+      Object.assign(clone.style, {
+        position: 'fixed',
+        left: '-100000px',
+        top: '0',
+        width: `${w}px`,
+        maxHeight: 'none',
+        overflow: 'visible',
+        height: 'auto',
+        background: '#ffffff',
+        padding: source.style.padding || '0',
+      });
+      document.body.appendChild(clone);
+      await new Promise((r) => setTimeout(r, 50)); // allow layout
+
+      // --- Snapshot entire content (not just visible area)
+      const canvas = await html2canvas(clone, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        windowWidth: clone.scrollWidth,
+        windowHeight: clone.scrollHeight,
+        useCORS: true,
+        removeContainer: true,
+        scrollX: 0,
+        scrollY: 0,
+      });
+
+      clone.remove();
+
+      // --- Build multi-page PDF
+      const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
-      const ratio = canvas.height / canvas.width;
-      const imgW = pageW - 48; // margins
-      const imgH = imgW * ratio;
-      const x = 24, y = 24;
+      const margin = 24;
+      const imgW = pageW - margin * 2;
 
-      if (imgH <= pageH - 48) {
-        pdf.addImage(imgData, 'PNG', x, y, imgW, imgH, undefined, 'FAST');
-      } else {
-        let curY = 0;
-        while (curY < canvas.height) {
-          const pageCanvas = document.createElement('canvas');
-          const pageCtx = pageCanvas.getContext('2d');
-          const sliceH = Math.min(canvas.height - curY, Math.floor((pageH - 48) * (canvas.width / imgW)));
-          pageCanvas.width = canvas.width;
-          pageCanvas.height = sliceH;
-          pageCtx.drawImage(canvas, 0, curY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
-          const pageImg = pageCanvas.toDataURL('image/png');
-          if (curY > 0) pdf.addPage();
-          const pageImgH = (sliceH / canvas.width) * imgW;
-          pdf.addImage(pageImg, 'PNG', x, y, imgW, pageImgH, undefined, 'FAST');
-          curY += sliceH;
-        }
+      // Height (in source pixels) that fits one page
+      const slicePxPerPage = Math.floor((pageH - margin * 2) * (canvas.width / imgW));
+
+      let curY = 0;
+      let first = true;
+      while (curY < canvas.height) {
+        const sliceH = Math.min(canvas.height - curY, slicePxPerPage);
+
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceH;
+        const ctx = pageCanvas.getContext('2d');
+        ctx.drawImage(canvas, 0, curY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+
+        const pageImg = pageCanvas.toDataURL('image/png');
+        if (!first) pdf.addPage();
+        const pageImgH = (sliceH / canvas.width) * imgW;
+        pdf.addImage(pageImg, 'PNG', margin, margin, imgW, pageImgH, undefined, 'FAST');
+
+        first = false;
+        curY += sliceH;
       }
 
       const fname = `Pool-Report_${range?.startDate || 'start'}_to_${range?.endDate || 'end'}.pdf`;
@@ -99,17 +132,17 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
     <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
       <div
         className="modal"
-        onClick={(e)=>e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
         role="document"
-        style={{ display:'grid', gridTemplateRows:'auto 1fr auto', maxHeight:'90vh' }}
+        style={{ display: 'grid', gridTemplateRows: 'auto 1fr auto', maxHeight: '90vh' }}
       >
         <div className="modal-head">
           <h3 style={{ margin: 0 }}>Report preview</h3>
           <button className="secondary" onClick={onClose} aria-label="Close">Close</button>
         </div>
 
-        {/* Scrollable content area */}
-        <div ref={wrapRef} className="report" style={{ overflow:'auto' }}>
+        {/* Scrollable report content */}
+        <div ref={wrapRef} className="report" style={{ overflow: 'auto' }}>
           <div className="report-header">
             <div>
               <div className="title">Pool Water Health</div>
@@ -151,19 +184,21 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
             <div className="card-title">Trend chart</div>
             <div className="chart-shot">
               {previewUrl
-                ? <img src={previewUrl} alt="Chart preview" style={{ width:'100%', height:'auto', display:'block' }} />
-                : <div style={{color:'#64748b'}}>Generating chart preview…</div>}
+                ? <img src={previewUrl} alt="Chart preview" style={{ width: '100%', height: 'auto', display: 'block' }} />
+                : <div style={{ color: '#64748b' }}>Generating chart preview…</div>}
             </div>
           </div>
 
           <div className="report-card">
             <div className="card-title">Notes</div>
-            <p style={{margin:0, color:'#475569'}}>This report reflects the selected date range and your current target settings.</p>
+            <p style={{ margin: 0, color: '#475569' }}>
+              This report reflects the selected date range and your current target settings.
+            </p>
           </div>
         </div>
 
         {/* Sticky footer */}
-        <div className="modal-actions" style={{ position:'sticky', bottom:0, background:'#fff' }}>
+        <div className="modal-actions" style={{ position: 'sticky', bottom: 0, background: '#fff' }}>
           <button onClick={generate} disabled={busy}>{busy ? 'Generating…' : 'Generate PDF'}</button>
         </div>
       </div>
@@ -172,5 +207,5 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
 }
 
 // Helpers
-function fmt(n){ return (n===null||n===undefined||Number.isNaN(n)) ? '—' : String(n); }
-function rng(r){ return r?.min!=null && r?.max!=null ? `${r.min} – ${r.max}` : '—'; }
+function fmt(n) { return (n === null || n === undefined || Number.isNaN(n)) ? '—' : String(n); }
+function rng(r) { return r?.min != null && r?.max != null ? `${r.min} – ${r.max}` : '—'; }
