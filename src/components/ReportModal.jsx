@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 export default function ReportModal({ open, onClose, readings = [], targets, range, chartEl }) {
   const [busy, setBusy] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const wrapRef = useRef(null);
 
   const latest = useMemo(() => {
@@ -11,8 +12,29 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
     return s[0];
   }, [readings]);
 
+  // When modal opens, make a lightweight snapshot of the chart for preview
   useEffect(() => {
-    if (!open) setBusy(false);
+    let cancelled = false;
+    async function makePreview() {
+      if (!open) return;
+      setPreviewUrl(null);
+      if (!chartEl) return;
+
+      try {
+        const { default: html2canvas } = await import('html2canvas');
+        // Capture just the chart area (scale=1 for quick preview)
+        const canvas = await html2canvas(chartEl, { backgroundColor: '#ffffff', scale: 1 });
+        if (!cancelled) setPreviewUrl(canvas.toDataURL('image/png'));
+      } catch {
+        // Ignore preview errors; user can still generate full PDF
+      }
+    }
+    makePreview();
+    return () => { cancelled = true; };
+  }, [open, chartEl]);
+
+  useEffect(() => {
+    if (!open) { setBusy(false); }
   }, [open]);
 
   if (!open) return null;
@@ -24,11 +46,10 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
         import('html2canvas'),
         import('jspdf'),
       ]);
-      const jsPDF = jsPDFmod.default; // ESM default
+      const jsPDF = jsPDFmod.default;
 
-      // Build a printable node (clone to avoid layout shifts)
+      // Build raster of the report container
       const node = wrapRef.current;
-      // Snapshot report viewport (A4 portrait, 795x1125 at ~96dpi)
       const canvas = await html2canvas(node, { scale: 2, backgroundColor: '#ffffff' });
       const imgData = canvas.toDataURL('image/png');
 
@@ -36,11 +57,12 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
 
-      // Fit width, keep aspect
+      // Fit width with margins
       const ratio = canvas.height / canvas.width;
-      const imgW = pageW - 48;           // 24pt margins
+      const imgW = pageW - 48; // 24pt margins
       const imgH = imgW * ratio;
       const x = 24, y = 24;
+
       if (imgH <= pageH - 48) {
         pdf.addImage(imgData, 'PNG', x, y, imgW, imgH, undefined, 'FAST');
       } else {
@@ -79,7 +101,7 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
           <button className="secondary" onClick={onClose}>Close</button>
         </div>
 
-        {/* Report content (what gets rasterized) */}
+        {/* Report content (this is what gets rasterized to PDF) */}
         <div ref={wrapRef} className="report">
           <div className="report-header">
             <div>
@@ -121,8 +143,9 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
           <div className="report-card">
             <div className="card-title">Trend chart</div>
             <div className="chart-shot">
-              {/* live chart snapshot via clone */}
-              {chartEl ? chartClone(chartEl) : <div style={{color:'#64748b'}}>Chart will appear here.</div>}
+              {previewUrl
+                ? <img src={previewUrl} alt="Chart preview" style={{ width:'100%', height:'auto', display:'block' }} />
+                : <div style={{color:'#64748b'}}>Generating chart preview…</div>}
             </div>
           </div>
 
@@ -143,11 +166,3 @@ export default function ReportModal({ open, onClose, readings = [], targets, ran
 // Helpers
 function fmt(n){ return (n===null||n===undefined||Number.isNaN(n)) ? '—' : String(n); }
 function rng(r){ return r?.min!=null && r?.max!=null ? `${r.min} – ${r.max}` : '—'; }
-
-// Cheap DOM clone (shallow) to avoid moving the chart
-function chartClone(el){
-  const clone = el.cloneNode(true);
-  clone.style.pointerEvents = 'none';
-  clone.style.userSelect = 'none';
-  return clone;
-}

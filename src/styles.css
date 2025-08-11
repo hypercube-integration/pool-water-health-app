@@ -259,3 +259,5 @@ code{ background:#f1f5f9; padding:2px 6px; border-radius:6px; }
 .kv span{ color:#64748b; }
 
 .chart-shot{ padding: 8px; border: 1px dashed #d6dee6; border-radius: 10px; }
+
+.chart-shot img { width: 100%; height: auto; display: block; }
