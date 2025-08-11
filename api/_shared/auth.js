@@ -1,30 +1,16 @@
-// api/_shared/auth.js
-function getUserFromHeaders(req) {
-  const h = req.headers['x-ms-client-principal'] || req.headers['X-MS-CLIENT-PRINCIPAL'];
-  if (!h) return null;
+// Minimal helper to read the SWA client principal and check admin.
+export function getClientPrincipal(req) {
+  const header = req.headers['x-ms-client-principal'] || req.headers['X-MS-CLIENT-PRINCIPAL'];
+  if (!header) return null;
+  const decoded = Buffer.from(header, 'base64').toString('ascii');
   try {
-    return JSON.parse(Buffer.from(h, 'base64').toString('utf8'));
+    return JSON.parse(decoded);
   } catch {
     return null;
   }
 }
 
-function requireAuth(context, req) {
-  const user = getUserFromHeaders(req);
-  if (!user) {
-    context.res = { status: 401, body: { error: 'Not authenticated' } };
-    return null;
-  }
-  return user;
+export function requireAdmin(principal) {
+  const roles = (principal?.userRoles || []).map(r => r.toLowerCase());
+  return roles.includes('admin');
 }
-
-function requireRole(context, user, roles) {
-  const has = user?.userRoles?.some(r => roles.includes(r));
-  if (!has) {
-    context.res = { status: 403, body: { error: 'Forbidden: missing role' } };
-    return false;
-  }
-  return true;
-}
-
-module.exports = { getUserFromHeaders, requireAuth, requireRole };

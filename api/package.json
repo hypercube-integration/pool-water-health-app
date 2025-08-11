@@ -13,6 +13,8 @@
     "azure-functions-core-tools": "^4.1.0"
   },
   "dependencies": {
-    "@azure/cosmos": "^4.5.0"
+    "@azure/cosmos": "^4.5.0",
+    "@azure/identity": "^4.2.0",
+    "node-fetch": "^3.3.2"
   }
 }
