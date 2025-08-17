@@ -1,6 +1,5 @@
 // src/pages/Admin.jsx
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 
 function useSwaUser() {
   const [user, setUser] = useState(null);
@@ -10,13 +9,7 @@ function useSwaUser() {
       try {
         const res = await fetch("/.auth/me", { credentials: "include" });
         const json = await res.json();
-        // SWA returns { clientPrincipal } or an array in some hosts; handle both
-        const cp =
-          json?.clientPrincipal ||
-          json?.[0]?.clientPrincipal ||
-          json?.[0] ||
-          null;
-
+        const cp = json?.clientPrincipal || json?.[0]?.clientPrincipal || json?.[0] || null;
         const roles = (cp?.userRoles || []).filter(Boolean);
         if (!ignore) {
           setUser({
@@ -37,7 +30,6 @@ function useSwaUser() {
 export default function Admin() {
   const user = useSwaUser();
 
-  // --- Invite tester form state (to mirror your existing page) ---
   const [swaName, setSwaName] = useState("");
   const [resourceGroup, setResourceGroup] = useState("");
   const [tester, setTester] = useState("");
@@ -80,11 +72,9 @@ export default function Admin() {
 
   return (
     <div className="space-y-6">
-      {/* Back link + title */}
+      {/* Back to dashboard */}
       <div className="flex items-center justify-between">
-        <Link to="/" className="inline-flex items-center gap-2 text-sm hover:underline">
-          ← Back to dashboard
-        </Link>
+        <a href="/" className="inline-flex items-center gap-2 text-sm hover:underline">← Back to dashboard</a>
         <h1 className="text-3xl font-semibold">Admin</h1>
         <div />
       </div>
@@ -103,16 +93,13 @@ export default function Admin() {
         </div>
       </div>
 
-      {/* --- NEW: Admin Actions --- */}
+      {/* Admin Actions */}
       <div className="rounded-xl border p-4 bg-white shadow-sm">
         <h2 className="text-lg font-semibold mb-3">Admin Actions</h2>
         <div className="flex flex-col sm:flex-row gap-3">
-          <Link
-            to="/admin/users"
-            className="px-4 py-2 border rounded-lg hover:bg-gray-50 text-center"
-          >
+          <a href="/admin/users" className="px-4 py-2 border rounded-lg hover:bg-gray-50 text-center">
             Manage Users &amp; Roles
-          </Link>
+          </a>
           <a
             href="https://portal.azure.com/#view/HubsExtension/BrowseResource/resourceType/microsoft.web%2FstaticSites"
             target="_blank" rel="noreferrer"
@@ -145,73 +132,26 @@ export default function Admin() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="flex flex-col">
             <label className="text-sm text-gray-600 mb-1">Static Web App name</label>
-            <input
-              className="border rounded px-3 py-2"
-              placeholder="e.g., pool-health"
-              value={swaName}
-              onChange={e => setSwaName(e.target.value)}
-            />
+            <input className="border rounded px-3 py-2" placeholder="e.g., pool-health" value={swaName} onChange={e => setSwaName(e.target.value)} />
           </div>
           <div className="flex flex-col">
             <label className="text-sm text-gray-600 mb-1">Resource group</label>
-            <input
-              className="border rounded px-3 py-2"
-              placeholder="e.g., rg-pool-app"
-              value={resourceGroup}
-              onChange={e => setResourceGroup(e.target.value)}
-            />
+            <input className="border rounded px-3 py-2" placeholder="e.g., rg-pool-app" value={resourceGroup} onChange={e => setResourceGroup(e.target.value)} />
           </div>
           <div className="flex flex-col">
             <label className="text-sm text-gray-600 mb-1">Tester (GitHub username or email)</label>
-            <input
-              className="border rounded px-3 py-2"
-              placeholder="octocat or name@example.com"
-              value={tester}
-              onChange={e => setTester(e.target.value)}
-            />
+            <input className="border rounded px-3 py-2" placeholder="octocat or name@example.com" value={tester} onChange={e => setTester(e.target.value)} />
           </div>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-4">
           {Object.keys(roles).map((r) => (
             <label key={r} className="inline-flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={roles[r]}
-                onChange={() => setRoles(prev => ({ ...prev, [r]: !prev[r] }))}
-              />
+              <input type="checkbox" checked={roles[r]} onChange={() => setRoles(prev => ({ ...prev, [r]: !prev[r] }))} />
               <span className="capitalize">{r}</span>
             </label>
           ))}
         </div>
 
         <div className="mt-4">
-          <textarea className="w-full border rounded px-3 py-2 text-sm font-mono" rows={3} readOnly value={cli} />
-        </div>
-
-        <div className="mt-3">
-          <button
-            className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-            onClick={() => {
-              navigator.clipboard?.writeText(cli);
-              alert("CLI command copied.");
-            }}
-          >
-            Copy CLI command
-          </button>
-          <a
-            className="ml-3 px-4 py-2 border rounded-lg hover:bg-gray-50"
-            href="https://portal.azure.com/#view/HubsExtension/BrowseResource/resourceType/microsoft.web%2FstaticSites"
-            target="_blank" rel="noreferrer"
-          >
-            Open Azure Portal (Static Web Apps)
-          </a>
-        </div>
-
-        <p className="text-xs text-gray-500 mt-3">
-          After you run the command, a one-time invite link is printed in the terminal. Share that link with the tester.
-        </p>
-      </div>
-    </div>
-  );
-}
+          <textarea classNa
