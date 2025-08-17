@@ -1,29 +1,35 @@
-import { ClientSecretCredential } from "@azure/identity";
-import fetch from "node-fetch";
-import { getClientPrincipal, requireAdmin } from "../_shared/auth.js";
+const { ClientSecretCredential } = require("@azure/identity");
 
+function getClientPrincipal(req) {
+  const header = req.headers["x-ms-client-principal"] || req.headers["X-MS-CLIENT-PRINCIPAL"];
+  if (!header) return null;
+  const decoded = Buffer.from(header, "base64").toString("ascii");
+  try { return JSON.parse(decoded); } catch { return null; }
+}
+function requireAdmin(principal) {
+  const roles = (principal?.userRoles || []).map(r => String(r).toLowerCase());
+  return roles.includes("admin");
+}
 const API_VERSION = "2024-11-01";
 
-export default async function (context, req) {
+module.exports = async function (context, req) {
   try {
     const principal = getClientPrincipal(req);
     if (!requireAdmin(principal)) {
-      return (context.res = { status: 403, jsonBody: { error: "Forbidden: admin only" } });
+      context.res = { status: 403, body: { error: "Forbidden: admin only" } };
+      return;
     }
 
     const { authProvider, userId, roles, displayName } = req.body || {};
     if (!authProvider || !userId) {
-      return (context.res = { status: 400, jsonBody: { error: "authProvider and userId are required" } });
+      context.res = { status: 400, body: { error: "authProvider and userId are required" } };
+      return;
     }
     const rolesString = Array.isArray(roles) ? roles.join(",") : (roles || "");
 
     const {
-      AZURE_TENANT_ID,
-      AZURE_CLIENT_ID,
-      AZURE_CLIENT_SECRET,
-      AZURE_SUBSCRIPTION_ID,
-      AZURE_RESOURCE_GROUP,
-      AZURE_STATIC_WEB_APP_NAME
+      AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET,
+      AZURE_SUBSCRIPTION_ID, AZURE_RESOURCE_GROUP, AZURE_STATIC_WEB_APP_NAME
     } = process.env;
 
     const credential = new ClientSecretCredential(AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET);
@@ -31,13 +37,7 @@ export default async function (context, req) {
 
     const url = `https://management.azure.com/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.Web/staticSites/${AZURE_STATIC_WEB_APP_NAME}/users/${encodeURIComponent(authProvider)}/${encodeURIComponent(userId)}?api-version=${API_VERSION}`;
 
-    const body = {
-      properties: {
-        provider: authProvider,
-        userId,
-        roles: rolesString
-      }
-    };
+    const body = { properties: { provider: authProvider, userId, roles: rolesString } };
     if (displayName) body.properties.displayName = displayName;
 
     const resp = await fetch(url, {
@@ -46,14 +46,12 @@ export default async function (context, req) {
       body: JSON.stringify(body)
     });
 
-    if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(`Update user failed ${resp.status}: ${text}`);
-    }
+    if (!resp.ok) throw new Error(`Update user failed ${resp.status}: ${await resp.text()}`);
     const data = await resp.json();
+
     context.res = {
       status: 200,
-      jsonBody: {
+      body: {
         id: data.name,
         provider: data.properties?.provider,
         userId: data.properties?.userId,
@@ -62,6 +60,6 @@ export default async function (context, req) {
       }
     };
   } catch (err) {
-    context.res = { status: 500, jsonBody: { error: err.message } };
+    context.res = { status: 500, body: { error: err.message } };
   }
-}
+};
