@@ -6,6 +6,11 @@
   "routes": [
     { "route": "/signed-out", "allowedRoles": ["anonymous"] },
 
+    /* --- Admin UI (lock to admins only) --- */
+    { "route": "/admin",    "allowedRoles": ["admin"] },
+    { "route": "/admin/*",  "allowedRoles": ["admin"] },
+
+    /* --- API endpoints with role rules --- */
     { "route": "/api/submitReading", "allowedRoles": ["writer", "admin"] },
     { "route": "/api/updateReading", "allowedRoles": ["editor", "admin"] },
     { "route": "/api/deleteReading", "allowedRoles": ["deleter", "admin"] },
@@ -14,5 +19,11 @@
     /* If you previously locked down getReadings, keep/add this:
     ,{ "route": "/api/getReadings",  "allowedRoles": ["authenticated", "admin"] }
     */
-  ]
+  ],
+  "responseOverrides": {
+    "401": {
+      "statusCode": 401,
+      "rewrite": "/index.html"
+    }
+  }
 }
