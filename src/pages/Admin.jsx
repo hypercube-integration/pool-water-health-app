@@ -1,160 +1,176 @@
 // src/pages/Admin.jsx
-import React from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-const roles = [
-  {
-    name: "admin",
-    description: "Full access. Can perform all actions.",
-    color: "bg-purple-200 text-purple-800",
-  },
-  {
-    name: "writer",
-    description: "Can add new readings.",
-    color: "bg-green-200 text-green-800",
-  },
-  {
-    name: "editor",
-    description: "Can edit existing readings.",
-    color: "bg-blue-200 text-blue-800",
-  },
-  {
-    name: "deleter",
-    description: "Can delete readings.",
-    color: "bg-red-200 text-red-800",
-  },
-  {
-    name: "exporter",
-    description: "Can export CSV/XLSX via API.",
-    color: "bg-yellow-200 text-yellow-800",
-  },
-  {
-    name: "authenticated",
-    description: "Signed-in users.",
-    color: "bg-gray-200 text-gray-800",
-  },
-  {
-    name: "anonymous",
-    description: "Guest (unauthenticated) users.",
-    color: "bg-gray-100 text-gray-600",
-  },
-];
+function useSwaUser() {
+  const [user, setUser] = useState(null);
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      try {
+        const res = await fetch("/.auth/me", { credentials: "include" });
+        const json = await res.json();
+        const cp = json?.clientPrincipal || json?.[0]?.clientPrincipal || json?.[0] || null;
+        const roles = (cp?.userRoles || []).filter(Boolean) || [];
+        if (!ignore) setUser({
+          userDetails: cp?.userDetails || "anonymous",
+          identityProvider: cp?.identityProvider || "github",
+          roles
+        });
+      } catch {
+        if (!ignore) setUser({ userDetails: "anonymous", identityProvider: "github", roles: ["anonymous"] });
+      }
+    })();
+    return () => { ignore = true; };
+  }, []);
+  return user;
+}
 
 export default function Admin() {
+  const user = useSwaUser();
+
+  // Invite form state
+  const [swaName, setSwaName] = useState("");
+  const [resourceGroup, setResourceGroup] = useState("");
+  const [tester, setTester] = useState("");
+  const [roles, setRoles] = useState({
+    admin: false,
+    writer: true,
+    editor: true,
+    deleter: false,
+    exporter: true,
+  });
+
+  const roleList = useMemo(
+    () => Object.entries(roles).filter(([,v])=>v).map(([k])=>k).join(","),
+    [roles]
+  );
+  const cli = useMemo(() => {
+    const name = swaName || "<SWA_NAME>";
+    const rg = resourceGroup || "<RESOURCE_GROUP>";
+    const who = tester || "<github-username-or-email>";
+    const r = roleList || "<role1,role2>";
+    return `az staticwebapp users invite --name ${name} --resource-group ${rg} --authentication-provider github --user-details ${who} --roles "${r}"`;
+  }, [swaName, resourceGroup, tester, roleList]);
+
+  if (!user) return <div style={{padding:16}}>Loading…</div>;
+
+  const chip = (txt, cls) => (<span className={`chip ${cls}`} key={txt}>{txt}</span>);
+
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      {/* Page heading */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Admin</h1>
-        {/* NEW: Proper link to Manage Users & Roles */}
-        <Link
-          to="/manage-users"
-          className="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow"
-        >
-          Manage Users & Roles
-        </Link>
+    <div className="admin-wrap">
+      <style>{`
+        .admin-wrap { display:flex; flex-direction:column; gap:16px; }
+        .card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,0.03); }
+        .row { display:flex; align-items:center; justify-content:space-between; }
+        .title { font-size:28px; font-weight:600; }
+        .subtle { color:#64748b; }
+        .chip { display:inline-flex; align-items:center; padding:2px 8px; font-size:12px; border-radius:999px; border:1px solid #e5e7eb; margin-right:6px; margin-bottom:6px; }
+        .btn { display:inline-block; padding:8px 14px; border:1px solid #e5e7eb; border-radius:10px; text-decoration:none; color:#111827; background:#fff; }
+        .btn:hover { background:#f9fafb; }
+        .grid { display:grid; grid-template-columns:1fr; gap:12px; }
+        @media(min-width: 700px){ .grid-3 { grid-template-columns: repeat(3, 1fr); } }
+        textarea, input { font: inherit; }
+        input, textarea { border:1px solid #e5e7eb; border-radius:8px; padding:8px 12px; }
+        .muted { color:#6b7280; font-size:12px; }
+        /* Color chips */
+        .admin    { background:#ecfdf5; border-color:#a7f3d0; color:#065f46; }
+        .writer   { background:#eff6ff; border-color:#bfdbfe; color:#1e40af; }
+        .editor   { background:#eef2ff; border-color:#c7d2fe; color:#3730a3; }
+        .deleter  { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
+        .exporter { background:#fffbeb; border-color:#fde68a; color:#92400e; }
+        .anonymous, .authenticated { background:#f3f4f6; border-color:#e5e7eb; color:#374151; }
+        .h2 { font-size:18px; font-weight:600; margin-bottom:8px; }
+      `}</style>
+
+      <div className="row">
+        <Link to="/" className="subtle">← Back to dashboard</Link>
+        <div className="title">Admin</div>
+        <div />
       </div>
 
-      {/* Signed in info (stub) */}
-      <div className="mb-6">
-        <div className="bg-gray-100 border rounded p-4 text-sm">
-          <p>
-            Signed in as <strong>hypercube-integration</strong> · Provider:{" "}
-            <span className="font-mono">github</span>
-          </p>
-          <p className="mt-2">
-            Roles:{" "}
-            {roles.map((role) => (
-              <span
-                key={role.name}
-                className={`inline-block px-2 py-0.5 mr-1 mb-1 text-xs font-semibold rounded ${role.color}`}
-              >
-                {role.name}
-              </span>
-            ))}
-          </p>
+      {/* Signed-in */}
+      <div className="card">
+        <div className="subtle" style={{display:"flex", flexWrap:"wrap", gap:8, alignItems:"center"}}>
+          <span>Signed in as <strong>{user.userDetails}</strong> · Provider:</span>
+          {chip(user.identityProvider, "authenticated")}
+          <span style={{margin:"0 4px"}}>·</span>
+          <span className="subtle">roles:</span>
+          <div>{user.roles.map(r => chip(r, r))}</div>
         </div>
       </div>
 
-      {/* Roles section */}
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold mb-3">Roles in this app</h2>
-        <ul className="space-y-2">
-          {roles.map((role) => (
-            <li
-              key={role.name}
-              className="flex items-center space-x-2 text-sm"
-            >
-              <span
-                className={`inline-block w-20 px-2 py-0.5 text-center text-xs font-semibold rounded ${role.color}`}
-              >
-                {role.name}
-              </span>
-              <span>{role.description}</span>
-            </li>
-          ))}
+      {/* Admin Actions */}
+      <div className="card">
+        <div className="h2">Admin Actions</div>
+        <div style={{display:"flex", gap:12, flexWrap:"wrap"}}>
+          <Link className="btn" to="/admin/users">Manage Users &amp; Roles</Link>
+          <a className="btn" target="_blank" rel="noreferrer"
+             href="https://portal.azure.com/#view/HubsExtension/BrowseResource/resourceType/microsoft.web%2FstaticSites">
+            Open Azure Portal (Static Web Apps)
+          </a>
+        </div>
+      </div>
+
+      {/* Roles in this app */}
+      <div className="card">
+        <div className="h2">Roles in this app</div>
+        <ul className="subtle" style={{listStyle:"none", padding:0, margin:0, display:"grid", gap:8}}>
+          <li>{chip("admin","admin")} — Full access. Can perform all actions.</li>
+          <li>{chip("writer","writer")} — Can add new readings.</li>
+          <li>{chip("editor","editor")} — Can edit existing readings.</li>
+          <li>{chip("deleter","deleter")} — Can delete readings.</li>
+          <li>{chip("exporter","exporter")} — Can export CSV/XLSX via API.</li>
         </ul>
       </div>
 
-      {/* Invite a tester section */}
-      <div>
-        <h2 className="text-xl font-semibold mb-3">Invite a tester</h2>
-        <p className="text-sm mb-3">
-          This builds the Azure CLI command. Run it in your terminal to generate
-          the invite link.
-        </p>
+      {/* Invite a tester */}
+      <div className="card">
+        <div className="h2">Invite a tester</div>
+        <p className="subtle">This builds the Azure CLI command. Run it in your terminal to generate the invite link.</p>
 
-        <div className="space-y-3">
+        <div className="grid grid-3" style={{marginTop:12}}>
           <div>
-            <label className="block text-sm font-medium mb-1">
-              Static Web App name
-            </label>
-            <input
-              type="text"
-              placeholder="e.g., pool-health"
-              className="w-full border rounded px-3 py-1"
-            />
+            <div className="subtle" style={{marginBottom:6}}>Static Web App name</div>
+            <input placeholder="e.g., pool-health" value={swaName} onChange={e=>setSwaName(e.target.value)} />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">
-              Resource group
-            </label>
-            <input
-              type="text"
-              placeholder="e.g., rg-pool-app"
-              className="w-full border rounded px-3 py-1"
-            />
+            <div className="subtle" style={{marginBottom:6}}>Resource group</div>
+            <input placeholder="e.g., rg-pool-app" value={resourceGroup} onChange={e=>setResourceGroup(e.target.value)} />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">
-              Tester (GitHub username or email)
+            <div className="subtle" style={{marginBottom:6}}>Tester (GitHub username or email)</div>
+            <input placeholder="octocat or name@example.com" value={tester} onChange={e=>setTester(e.target.value)} />
+          </div>
+        </div>
+
+        <div style={{marginTop:12, display:"flex", gap:16, flexWrap:"wrap"}}>
+          {Object.keys(roles).map(r => (
+            <label key={r} className="subtle" style={{display:"inline-flex", gap:8, alignItems:"center"}}>
+              <input type="checkbox" checked={roles[r]} onChange={()=>setRoles(prev=>({...prev, [r]: !prev[r]}))} />
+              <span style={{textTransform:"capitalize"}}>{r}</span>
             </label>
-            <input
-              type="text"
-              placeholder="octocat or name@example.com"
-              className="w-full border rounded px-3 py-1"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {["admin", "writer", "editor", "deleter", "exporter"].map((role) => (
-              <label key={role} className="flex items-center space-x-1">
-                <input type="checkbox" defaultChecked />
-                <span className="capitalize">{role}</span>
-              </label>
-            ))}
-          </div>
+          ))}
+        </div>
 
-          <pre className="bg-gray-900 text-green-200 p-3 rounded text-xs overflow-x-auto">
-            az staticwebapp users invite --name &lt;SWA_NAME&gt; --resource-group
-            &lt;RESOURCE_GROUP&gt; --authentication-provider github
-            --user-details &lt;github-username-or-email&gt; --roles
-            "writer,editor,deleter,exporter"
-          </pre>
+        <div style={{marginTop:12}}>
+          <textarea rows={3} readOnly value={cli}
+            style={{width:"100%", fontFamily:"ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace"}} />
+        </div>
 
-          <button className="px-4 py-2 bg-green-600 text-white rounded shadow hover:bg-green-700">
+        <div style={{marginTop:12, display:"flex", gap:12, flexWrap:"wrap"}}>
+          <button className="btn" onClick={() => { navigator.clipboard?.writeText(cli); alert("CLI command copied."); }}>
             Copy CLI command
           </button>
+          <a className="btn" target="_blank" rel="noreferrer"
+             href="https://portal.azure.com/#view/HubsExtension/BrowseResource/resourceType/microsoft.web%2FstaticSites">
+            Open Azure Portal (Static Web Apps)
+          </a>
         </div>
+
+        <p className="muted" style={{marginTop:8}}>
+          After you run the command, a one-time invite link is printed in the terminal. Share that link with the tester.
+        </p>
       </div>
     </div>
   );
