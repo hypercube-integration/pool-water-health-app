@@ -1,273 +1,160 @@
 // src/pages/Admin.jsx
-import { useEffect, useMemo, useState } from "react";
+import React from "react";
+import { Link } from "react-router-dom";
 
-function useSwaUser() {
-  const [user, setUser] = useState(null);
-  useEffect(() => {
-    let ignore = false;
-    (async () => {
-      try {
-        const res = await fetch("/.auth/me", { credentials: "include" });
-        const json = await res.json();
-        const cp =
-          json?.clientPrincipal ||
-          json?.[0]?.clientPrincipal ||
-          json?.[0] ||
-          null;
-
-        const roles = (cp?.userRoles || []).filter(Boolean);
-        if (!ignore) {
-          setUser({
-            userDetails: cp?.userDetails || "anonymous",
-            identityProvider: cp?.identityProvider || "github",
-            roles,
-          });
-        }
-      } catch {
-        if (!ignore) {
-          setUser({
-            userDetails: "anonymous",
-            identityProvider: "github",
-            roles: ["anonymous"],
-          });
-        }
-      }
-    })();
-    return () => {
-      ignore = true;
-    };
-  }, []);
-  return user;
-}
+const roles = [
+  {
+    name: "admin",
+    description: "Full access. Can perform all actions.",
+    color: "bg-purple-200 text-purple-800",
+  },
+  {
+    name: "writer",
+    description: "Can add new readings.",
+    color: "bg-green-200 text-green-800",
+  },
+  {
+    name: "editor",
+    description: "Can edit existing readings.",
+    color: "bg-blue-200 text-blue-800",
+  },
+  {
+    name: "deleter",
+    description: "Can delete readings.",
+    color: "bg-red-200 text-red-800",
+  },
+  {
+    name: "exporter",
+    description: "Can export CSV/XLSX via API.",
+    color: "bg-yellow-200 text-yellow-800",
+  },
+  {
+    name: "authenticated",
+    description: "Signed-in users.",
+    color: "bg-gray-200 text-gray-800",
+  },
+  {
+    name: "anonymous",
+    description: "Guest (unauthenticated) users.",
+    color: "bg-gray-100 text-gray-600",
+  },
+];
 
 export default function Admin() {
-  const user = useSwaUser();
-
-  // Invite-tester UI state (mirrors your existing page)
-  const [swaName, setSwaName] = useState("");
-  const [resourceGroup, setResourceGroup] = useState("");
-  const [tester, setTester] = useState("");
-  const [roles, setRoles] = useState({
-    admin: false,
-    writer: true,
-    editor: true,
-    deleter: false,
-    exporter: true,
-  });
-
-  const roleList = useMemo(
-    () =>
-      Object.entries(roles)
-        .filter(([, v]) => v)
-        .map(([k]) => k)
-        .join(","),
-    [roles]
-  );
-
-  const cli = useMemo(() => {
-    const name = swaName || "<SWA_NAME>";
-    const rg = resourceGroup || "<RESOURCE_GROUP>";
-    const who = tester || "<github-username-or-email>";
-    const r = roleList || "<role1,role2>";
-    return `az staticwebapp users invite --name ${name} --resource-group ${rg} --authentication-provider github --user-details ${who} --roles "${r}"`;
-  }, [swaName, resourceGroup, tester, roleList]);
-
-  const badge = (txt, cls) => (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 text-xs rounded-md border ${cls}`}
-    >
-      {txt}
-    </span>
-  );
-
-  if (!user) return <div className="p-4">Loading…</div>;
-
-  const roleBadges = {
-    admin: "bg-green-50 border-green-200 text-green-700",
-    writer: "bg-blue-50  border-blue-200  text-blue-700",
-    editor: "bg-sky-50   border-sky-200   text-sky-700",
-    deleter: "bg-rose-50  border-rose-200  text-rose-700",
-    exporter: "bg-amber-50 border-amber-200 text-amber-700",
-    anonymous: "bg-gray-50 border-gray-200 text-gray-700",
-    authenticated: "bg-gray-50 border-gray-200 text-gray-700",
-  };
-
   return (
-    <div className="space-y-6">
-      {/* Back to dashboard + title */}
-      <div className="flex items-center justify-between">
-        <a
-          href="/"
-          className="inline-flex items-center gap-2 text-sm hover:underline"
+    <div className="p-6 max-w-4xl mx-auto">
+      {/* Page heading */}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Admin</h1>
+        {/* NEW: Proper link to Manage Users & Roles */}
+        <Link
+          to="/manage-users"
+          className="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow"
         >
-          ← Back to dashboard
-        </a>
-        <h1 className="text-3xl font-semibold">Admin</h1>
-        <div />
+          Manage Users & Roles
+        </Link>
       </div>
 
-      {/* Signed-in bar */}
-      <div className="rounded-xl border p-4 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span>
-            Signed in as{" "}
-            <span className="font-medium">{user.userDetails}</span> · Provider:
-          </span>
-          {badge(
-            user.identityProvider,
-            "bg-gray-50 border-gray-200 text-gray-700"
-          )}
-          <span className="hidden sm:inline">·</span>
-          <div className="flex flex-wrap gap-1">
-            {user.roles.map((r) => (
-              <span key={r}>
-                {badge(
-                  r,
-                  roleBadges[r] || "bg-gray-50 border-gray-200 text-gray-700"
-                )}
+      {/* Signed in info (stub) */}
+      <div className="mb-6">
+        <div className="bg-gray-100 border rounded p-4 text-sm">
+          <p>
+            Signed in as <strong>hypercube-integration</strong> · Provider:{" "}
+            <span className="font-mono">github</span>
+          </p>
+          <p className="mt-2">
+            Roles:{" "}
+            {roles.map((role) => (
+              <span
+                key={role.name}
+                className={`inline-block px-2 py-0.5 mr-1 mb-1 text-xs font-semibold rounded ${role.color}`}
+              >
+                {role.name}
               </span>
             ))}
-          </div>
+          </p>
         </div>
       </div>
 
-      {/* NEW: Admin Actions */}
-      <div className="rounded-xl border p-4 bg-white shadow-sm">
-        <h2 className="text-lg font-semibold mb-3">Admin Actions</h2>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <a
-            href="/admin/users"
-            className="px-4 py-2 border rounded-lg hover:bg-gray-50 text-center"
-          >
-            Manage Users &amp; Roles
-          </a>
-          <a
-            href="https://portal.azure.com/#view/HubsExtension/BrowseResource/resourceType/microsoft.web%2FstaticSites"
-            target="_blank"
-            rel="noreferrer"
-            className="px-4 py-2 border rounded-lg hover:bg-gray-50 text-center"
-          >
-            Open Azure Portal (Static Web Apps)
-          </a>
-        </div>
-      </div>
-
-      {/* Roles in this app */}
-      <div className="rounded-xl border p-4 bg-white shadow-sm">
-        <h2 className="text-lg font-semibold mb-3">Roles in this app</h2>
-        <ul className="space-y-2 text-sm">
-          <li>
-            {badge("admin", roleBadges.admin)} — Full access. Can perform all
-            actions.
-          </li>
-          <li>
-            {badge("writer", roleBadges.writer)} — Can add new readings.
-          </li>
-          <li>
-            {badge("editor", roleBadges.editor)} — Can edit existing readings.
-          </li>
-          <li>
-            {badge("deleter", roleBadges.deleter)} — Can delete readings.
-          </li>
-          <li>
-            {badge("exporter", roleBadges.exporter)} — Can export CSV/XLSX via
-            API.
-          </li>
+      {/* Roles section */}
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold mb-3">Roles in this app</h2>
+        <ul className="space-y-2">
+          {roles.map((role) => (
+            <li
+              key={role.name}
+              className="flex items-center space-x-2 text-sm"
+            >
+              <span
+                className={`inline-block w-20 px-2 py-0.5 text-center text-xs font-semibold rounded ${role.color}`}
+              >
+                {role.name}
+              </span>
+              <span>{role.description}</span>
+            </li>
+          ))}
         </ul>
       </div>
 
-      {/* Invite a tester */}
-      <div className="rounded-xl border p-4 bg-white shadow-sm">
-        <h2 className="text-lg font-semibold mb-3">Invite a tester</h2>
-        <p className="text-sm text-gray-700 mb-4">
+      {/* Invite a tester section */}
+      <div>
+        <h2 className="text-xl font-semibold mb-3">Invite a tester</h2>
+        <p className="text-sm mb-3">
           This builds the Azure CLI command. Run it in your terminal to generate
           the invite link.
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="flex flex-col">
-            <label className="text-sm text-gray-600 mb-1">
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium mb-1">
               Static Web App name
             </label>
             <input
-              className="border rounded px-3 py-2"
+              type="text"
               placeholder="e.g., pool-health"
-              value={swaName}
-              onChange={(e) => setSwaName(e.target.value)}
+              className="w-full border rounded px-3 py-1"
             />
           </div>
-          <div className="flex flex-col">
-            <label className="text-sm text-gray-600 mb-1">
+          <div>
+            <label className="block text-sm font-medium mb-1">
               Resource group
             </label>
             <input
-              className="border rounded px-3 py-2"
+              type="text"
               placeholder="e.g., rg-pool-app"
-              value={resourceGroup}
-              onChange={(e) => setResourceGroup(e.target.value)}
+              className="w-full border rounded px-3 py-1"
             />
           </div>
-          <div className="flex flex-col">
-            <label className="text-sm text-gray-600 mb-1">
+          <div>
+            <label className="block text-sm font-medium mb-1">
               Tester (GitHub username or email)
             </label>
             <input
-              className="border rounded px-3 py-2"
+              type="text"
               placeholder="octocat or name@example.com"
-              value={tester}
-              onChange={(e) => setTester(e.target.value)}
+              className="w-full border rounded px-3 py-1"
             />
           </div>
-        </div>
+          <div className="flex flex-wrap gap-2">
+            {["admin", "writer", "editor", "deleter", "exporter"].map((role) => (
+              <label key={role} className="flex items-center space-x-1">
+                <input type="checkbox" defaultChecked />
+                <span className="capitalize">{role}</span>
+              </label>
+            ))}
+          </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-4">
-          {Object.keys(roles).map((r) => (
-            <label key={r} className="inline-flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={roles[r]}
-                onChange={() =>
-                  setRoles((prev) => ({ ...prev, [r]: !prev[r] }))
-                }
-              />
-              <span className="capitalize">{r}</span>
-            </label>
-          ))}
-        </div>
+          <pre className="bg-gray-900 text-green-200 p-3 rounded text-xs overflow-x-auto">
+            az staticwebapp users invite --name &lt;SWA_NAME&gt; --resource-group
+            &lt;RESOURCE_GROUP&gt; --authentication-provider github
+            --user-details &lt;github-username-or-email&gt; --roles
+            "writer,editor,deleter,exporter"
+          </pre>
 
-        <div className="mt-4">
-          <textarea
-            className="w-full border rounded px-3 py-2 text-sm font-mono"
-            rows={3}
-            readOnly
-            value={cli}
-          />
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-3">
-          <button
-            className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-            onClick={() => {
-              navigator.clipboard?.writeText(cli);
-              alert("CLI command copied.");
-            }}
-          >
+          <button className="px-4 py-2 bg-green-600 text-white rounded shadow hover:bg-green-700">
             Copy CLI command
           </button>
-          <a
-            className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-            href="https://portal.azure.com/#view/HubsExtension/BrowseResource/resourceType/microsoft.web%2FstaticSites"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open Azure Portal (Static Web Apps)
-          </a>
         </div>
-
-        <p className="text-xs text-gray-500 mt-3">
-          After you run the command, a one-time invite link is printed in the
-          terminal. Share that link with the tester.
-        </p>
       </div>
     </div>
   );
