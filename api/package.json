@@ -2,19 +2,10 @@
   "name": "api",
   "version": "1.0.0",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
-  "devDependencies": {
-    "azure-functions-core-tools": "^4.1.0"
-  },
+  "engines": { "node": ">=18" },
   "dependencies": {
     "@azure/cosmos": "^4.5.0",
-    "@azure/identity": "^4.2.0",
-    "node-fetch": "^3.3.2"
-  }
+    "@azure/identity": "^4.2.0"
+  },
+  "devDependencies": { "azure-functions-core-tools": "^4.1.0" }
 }
