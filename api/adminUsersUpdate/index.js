@@ -34,7 +34,10 @@ module.exports = async function (context, req) {
     const credential = new ClientSecretCredential(AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET);
     const token = await credential.getToken("https://management.azure.com/.default");
 
-    const url = `https://management.azure.com/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.Web/staticSites/${AZURE_STATIC_WEB_APP_NAME}/users/${encodeURIComponent(authProvider)}/${encodeURIComponent(userId)}?api-version=${API_VERSION}`;
+    const url = `https://management.azure.com/subscriptions/${AZURE_SUBSCRIPTION_ID}` +
+                `/resourceGroups/${AZURE_RESOURCE_GROUP}` +
+                `/providers/Microsoft.Web/staticSites/${AZURE_STATIC_WEB_APP_NAME}` +
+                `/users/${encodeURIComponent(authProvider)}/${encodeURIComponent(userId)}?api-version=${API_VERSION}`;
 
     const body = { properties: { provider: authProvider, userId, roles: rolesString } };
     if (displayName) body.properties.displayName = displayName;
@@ -45,7 +48,7 @@ module.exports = async function (context, req) {
       body: JSON.stringify(body)
     });
 
-    if (!resp.ok) throw new Error(`Update user failed ${resp.status}: ${await resp.text()}`);
+    if (!resp.ok) throw new Error(`Update user failed ${resp.status}: ${await resp.text().catch(()=> "")}`);
     const data = await resp.json();
 
     context.res = {
