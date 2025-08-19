@@ -42,7 +42,7 @@ module.exports = async function (context, req) {
 
     while (url) {
       const resp = await fetch(url, { headers: { Authorization: `Bearer ${token.token}` } });
-      if (!resp.ok) throw new Error(`List users failed ${resp.status}: ${await resp.text().catch(()=> "")}`);
+      if (!resp.ok) throw new Error(`List users failed ${resp.status}: ${await resp.text().catch(()=>"")}`);
       const data = await resp.json();
       (data.value || []).forEach(u => users.push({
         id: u.name,

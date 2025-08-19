@@ -48,7 +48,7 @@ module.exports = async function (context, req) {
       body: JSON.stringify(body)
     });
 
-    if (!resp.ok) throw new Error(`Update user failed ${resp.status}: ${await resp.text().catch(()=> "")}`);
+    if (!resp.ok) throw new Error(`Update user failed ${resp.status}: ${await resp.text().catch(()=>"")}`);
     const data = await resp.json();
 
     context.res = {
