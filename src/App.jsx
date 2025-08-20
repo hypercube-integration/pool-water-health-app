@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState, createContext, useContext } from "react";
 // Pages
 import Dashboard from "./pages/Dashboard.jsx";
 import SettingsPanel from "./components/SettingsPanel.jsx";
-import Admin from "./pages/Admin.jsx";
-import AdminUsers from "./pages/AdminUsers.jsx";
+import Admin from "./pages/Manage.jsx";
+import AdminUsers from "./pages/ManageUsers.jsx";
 
 /* ---------------------- Auth context via /.auth/me ---------------------- */
 const AuthCtx = createContext(null);
