@@ -2,10 +2,13 @@
   "name": "api",
   "version": "1.0.0",
   "main": "index.js",
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "@azure/cosmos": "^4.5.0",
-    "@azure/identity": "^4.2.0"
+    "@azure/identity": "^4.2.0",
+    "node-fetch": "^2.7.0"
   },
   "devDependencies": {
     "azure-functions-core-tools": "^4.1.0"
