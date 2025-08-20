@@ -1,11 +1,11 @@
 export async function listUsers() {
-  const res = await fetch("/api/admin/users", { credentials: "include" });
+  const res = await fetch("/api/manage/users", { credentials: "include" });
   if (!res.ok) throw new Error(`List users failed: ${res.status}`);
   return res.json();
 }
 
 export async function updateUser({ authProvider, userId, roles, displayName }) {
-  const res = await fetch("/api/admin/users/update", {
+  const res = await fetch("/api/manage/users/update", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",

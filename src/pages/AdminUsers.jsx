@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 
 /* --------------------------- API helpers --------------------------- */
 async function listUsers() {
-  const res = await fetch("/api/adminUsers", { credentials: "include" });
+  const res = await fetch("/api/manageUsers", { credentials: "include" });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`List users failed: ${res.status} ${text}`);
@@ -14,7 +14,7 @@ async function listUsers() {
 }
 
 async function updateUser({ authProvider, userId, roles, displayName }) {
-  const res = await fetch("/api/adminUsersUpdate", {
+  const res = await fetch("/api/manageUsersUpdate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
