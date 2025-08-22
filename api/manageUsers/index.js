@@ -1,141 +1,173 @@
 // api/manageUsers/index.js
-// Verbose user listing with diagnostics. Returns extra info when ?debug=1
+// Lists SWA users via ARM, trying multiple API versions, env names, and action paths.
+// Env required: SWA_RESOURCE_ID  (preferred)
+// Optional env: SWA_ENVIRONMENT, SWA_ARM_API_VERSION
+// Auth env: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
 
-const fetch = (...args) => import("node-fetch").then(({ default: f }) => f(...args));
-
-const REQUIRED = [
-  "AZURE_TENANT_ID",
-  "AZURE_CLIENT_ID",
-  "AZURE_CLIENT_SECRET",
-  "SWA_SUBSCRIPTION_ID",
-  "SWA_RESOURCE_GROUP",
-  "SWA_NAME",
-];
-
-function needEnv() {
-  const missing = REQUIRED.filter((k) => !process.env[k]);
-  return missing;
-}
-
-async function getArmToken() {
-  // Client credentials flow for ARM
-  const tenant = process.env.AZURE_TENANT_ID;
-  const clientId = process.env.AZURE_CLIENT_ID;
-  const clientSecret = process.env.AZURE_CLIENT_SECRET;
-
-  const url = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`;
-  const body = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
-    scope: "https://management.azure.com/.default",
-    grant_type: "client_credentials",
-  });
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
-  });
-
-  const text = await res.text();
-  let json;
-  try { json = JSON.parse(text); } catch {}
-
-  if (!res.ok) {
-    const e = new Error(`token failed ${res.status}`);
-    e.details = json || text;
-    throw e;
-  }
-  return json.access_token;
-}
-
-async function armGET(url, token) {
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const text = await res.text();
-  let json; try { json = JSON.parse(text); } catch {}
-
-  return { ok: res.ok, status: res.status, json, text, headers: Object.fromEntries(res.headers.entries()) };
-}
+const { getSwaResourceId, getArmToken, armGET, armPOST } = require("../_shared/arm");
 
 module.exports = async function (context, req) {
   const verbose = req.query?.debug === "1";
 
+  // Try newest first (Azure’s error message listed these as supported for your region)
+  const apiVersions = [
+    process.env.SWA_ARM_API_VERSION?.trim(),
+    "2024-11-01",
+    "2024-04-01",
+    "2023-12-01",
+    "2023-01-01",
+    "2022-09-01",
+    "2022-03-01",
+    "2021-03-01",
+    "2021-02-01",
+    "2021-01-15",
+    "2021-01-01",
+    "2020-12-01",
+    "2020-10-01",
+    "2020-09-01",
+    "2020-06-01",
+    "2019-12-01-preview",
+    "2019-08-01",
+  ].filter(Boolean);
+
+  const envCandidates = [
+    (process.env.SWA_ENVIRONMENT || "").trim(),
+    "Production",
+    "production",
+    "Default",
+    "default",
+    "default-production",
+    // Seen in a few older free SKUs:
+    "Build",
+  ].filter(Boolean);
+
   try {
-    // 0) Ensure config exists
-    const missing = needEnv();
-    if (missing.length) {
-      const msg = `Missing env: ${missing.join(", ")}`;
-      context.log.error(msg);
-      context.res = { status: 500, body: { error: msg } };
-      return;
-    }
-
-    const sub = process.env.SWA_SUBSCRIPTION_ID;
-    const rg = process.env.SWA_RESOURCE_GROUP;
-    const name = process.env.SWA_NAME;
-    const envName = process.env.SWA_ENVIRONMENT || "Production"; // allow override, default Production
-    const apiVersion = process.env.SWA_ARM_API_VERSION || "2022-03-01";
-
-    // 1) Get ARM token
+    const resourceId = getSwaResourceId();
     const token = await getArmToken();
+    const debug = [];
 
-    // 2) Try both ARM list endpoints. Different docs/sdks use these two shapes.
-    const base = `https://management.azure.com/subscriptions/${sub}/resourceGroups/${rg}/providers/Microsoft.Web/staticSites/${name}`;
-    const tries = [
-      {
-        key: "listUsers",
-        url: `${base}/environments/${envName}/listUsers?api-version=${apiVersion}`,
-      },
-      {
-        key: "listStaticSiteUsers",
-        url: `${base}/listStaticSiteUsers?api-version=${apiVersion}&environmentName=${encodeURIComponent(envName)}`,
-      },
-    ];
-
-    const debugInfo = [];
-    let users = null, lastErr = null;
-
-    for (const t of tries) {
-      const r = await armGET(t.url, token);
-      debugInfo.push({ try: t.key, url: t.url, status: r.status, body: r.json || r.text, headers: r.headers });
-      if (r.ok) {
-        // normalize result shape
-        const arr = Array.isArray(r.json?.value) ? r.json.value : (Array.isArray(r.json) ? r.json : []);
-        users = arr.map(u => ({
-          displayName: u.displayName || u.name || "",
-          userId: u.userId || u.user_id || u.user || "",
-          provider: u.provider || u.identityProvider || "",
-          roles: (u.roles || "").split(",").map(s => s.trim()).filter(Boolean),
-          raw: u
-        }));
-        break;
-      } else {
-        lastErr = new Error(`ARM ${t.key} ${r.status}`);
+    // 0) Sanity probe (resource exists + SP is authorized)
+    {
+      const v = apiVersions[0];
+      const url = `https://management.azure.com${resourceId}?api-version=${v}`;
+      const res = await armGET(url, token);
+      debug.push({ try: "getStaticSite(GET)", url, status: res.status, body: res.json || res.text });
+      if (!res.ok) {
+        context.res = {
+          status: 500,
+          body: verbose ? { error: "Static site probe failed", debug } : { error: "Static site probe failed" },
+        };
+        return;
       }
     }
 
-    if (!users) {
-      const hint =
-        "ARM returned non-200. Check SWA_NAME, SWA_RESOURCE_GROUP, SWA_SUBSCRIPTION_ID, environment (SWA_ENVIRONMENT=Production), and that the service principal has 'Static Web App Contributor' (or higher) on the Static Web App.";
-      context.log.error("manageUsers failed", { debugInfo, hint });
-      context.res = {
-        status: 500,
-        body: verbose ? { error: "List users failed", debug: debugInfo, hint } : { error: "List users failed" },
-      };
-      return;
+    // 1) Optional: enumerate environments (not all SKUs expose this; 404 is OK)
+    for (const v of apiVersions) {
+      const url = `https://management.azure.com${resourceId}/environments?api-version=${v}`;
+      const res = await armGET(url, token);
+      debug.push({ try: "listEnvironments(GET, optional)", url, status: res.status, body: res.json || res.text });
+      if (res.ok && Array.isArray(res.json?.value)) {
+        // Prepend discovered names so they are tried first
+        for (const e of res.json.value) {
+          const nm = e?.name || e?.properties?.name;
+          if (nm && !envCandidates.includes(nm)) envCandidates.unshift(nm);
+        }
+        break;
+      }
     }
 
-    // Success
-    context.res = verbose
-      ? { status: 200, body: { users, debug: { env: envName, apiVersion, tested: tries.map(t => t.key) } } }
-      : { status: 200, body: { users } };
+    // 2) Build a thorough attempt list.
+    const attempts = [];
+    for (const v of apiVersions) {
+      // Root-scoped POST actions
+      attempts.push({
+        key: `listUsers:root:POST:${v}`,
+        url: `https://management.azure.com${resourceId}/listUsers?api-version=${v}`,
+        method: "POST",
+        shape: "root",
+        apiVersion: v,
+      });
+      attempts.push({
+        key: `listStaticSiteUsers:root:POST:${v}`,
+        url: `https://management.azure.com${resourceId}/listStaticSiteUsers?api-version=${v}`,
+        method: "POST",
+        shape: "root",
+        apiVersion: v,
+      });
+
+      // Some SKUs briefly exposed a GET list:
+      attempts.push({
+        key: `users:root:GET:${v}`,
+        url: `https://management.azure.com${resourceId}/users?api-version=${v}`,
+        method: "GET",
+        shape: "rootUsersGET",
+        apiVersion: v,
+      });
+
+      // Environment-scoped variants
+      for (const envName of envCandidates) {
+        const enc = encodeURIComponent(envName);
+        attempts.push({
+          key: `listUsers:env:POST:${v}:${envName}`,
+          url: `https://management.azure.com${resourceId}/environments/${enc}/listUsers?api-version=${v}`,
+          method: "POST",
+          shape: "env",
+          apiVersion: v,
+          envName,
+        });
+        attempts.push({
+          key: `listStaticSiteUsers:envQuery:POST:${v}:${envName}`,
+          url: `https://management.azure.com${resourceId}/listStaticSiteUsers?api-version=${v}&environmentName=${enc}`,
+          method: "POST",
+          shape: "envQuery",
+          apiVersion: v,
+          envName,
+        });
+        // Defensive GET shape (rare, but cheap to try)
+        attempts.push({
+          key: `users:env:GET:${v}:${envName}`,
+          url: `https://management.azure.com${resourceId}/environments/${enc}/users?api-version=${v}`,
+          method: "GET",
+          shape: "envUsersGET",
+          apiVersion: v,
+          envName,
+        });
+      }
+    }
+
+    // 3) Try in sequence; return on first success
+    for (const a of attempts) {
+      const res = a.method === "GET" ? await armGET(a.url, token) : await armPOST(a.url, token, {});
+      const body = res.json || res.text;
+      debug.push({ try: a.key, url: a.url, status: res.status, body: verbose ? body : (res.ok ? "(ok)" : "(not ok)") });
+
+      if (res.ok) {
+        const raw = Array.isArray(res.json?.value) ? res.json.value
+                  : Array.isArray(res.json) ? res.json
+                  : (res.json?.users && Array.isArray(res.json.users) ? res.json.users : []);
+        const users = raw.map(u => ({
+          displayName: u.displayName || u.name || u.userDetails || "",
+          userId: u.userId || u.user_id || u.user || u.principalId || "",
+          provider: u.provider || u.identityProvider || u.providerName || "",
+          roles: (u.roles || u.roleNames || "")
+            .toString()
+            .split(",")
+            .map(s => s.trim())
+            .filter(Boolean),
+        }));
+
+        context.res = verbose
+          ? { status: 200, body: { users, meta: { apiVersion: a.apiVersion, envName: a.envName || null, pathShape: a.shape }, debug } }
+          : { status: 200, body: { users } };
+        return;
+      }
+    }
+
+    const hint =
+      "All permutations still returned non-200. Next checks: (1) In Azure Portal → your SWA → Users: does the list load? Note the environment name it shows. (2) If your plan is Free, some tenants/regions disable ARM listing; consider upgrading to Standard or managing roles via invitations instead.";
+    context.res = { status: 500, body: verbose ? { error: "List users failed", debug, hint } : { error: "List users failed" } };
   } catch (err) {
     context.log.error("manageUsers fatal", err);
-    context.res = {
-      status: 500,
-      body: { error: err.message || "manageUsers failed", details: (req.query?.debug === "1") ? err.details : undefined },
-    };
+    context.res = { status: 500, body: { error: err.message || "List users failed" } };
   }
 };

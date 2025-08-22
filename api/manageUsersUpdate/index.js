@@ -1,67 +1,36 @@
-const { ClientSecretCredential } = require("@azure/identity");
+// api/manageUsersUpdate/index.js
+// Echo stub that verifies ARM auth + resource resolution using SWA_RESOURCE_ID.
+// Replace with real role update later.
 
-function getClientPrincipal(req) {
-  const h = req.headers["x-ms-client-principal"] || req.headers["X-MS-CLIENT-PRINCIPAL"];
-  if (!h) return null;
-  try { return JSON.parse(Buffer.from(h, "base64").toString("ascii")); } catch { return null; }
-}
-function requireAdmin(p) {
-  return (p?.userRoles || []).map(r => String(r).toLowerCase()).includes("admin");
-}
-
-const API_VERSION = "2024-11-01";
+const { getSwaResourceId, getArmToken, armGET } = require("../_shared/arm");
 
 module.exports = async function (context, req) {
+  const verbose = req.query?.debug === "1";
+  const apiVersion = process.env.SWA_ARM_API_VERSION || "2022-03-01";
+
   try {
-    const principal = getClientPrincipal(req);
-    if (!requireAdmin(principal)) {
-      context.res = { status: 403, body: { error: "Forbidden: admin only" } };
+    const resourceId = getSwaResourceId();
+    const token = await getArmToken();
+
+    // Sanity check we can read the SWA resource
+    const probeUrl = `https://management.azure.com${resourceId}?api-version=${apiVersion}`;
+    const probe = await armGET(probeUrl, token);
+
+    if (!probe.ok) {
+      context.res = {
+        status: 500,
+        body: verbose
+          ? { error: "Probe failed", debug: { url: probeUrl, status: probe.status, body: probe.json || probe.text } }
+          : { error: "Probe failed" },
+      };
       return;
     }
 
-    const { authProvider, userId, roles, displayName } = req.body || {};
-    if (!authProvider || !userId) {
-      context.res = { status: 400, body: { error: "authProvider and userId are required" } };
-      return;
-    }
-    const rolesString = Array.isArray(roles) ? roles.join(",") : (roles || "");
-
-    const {
-      AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET,
-      AZURE_SUBSCRIPTION_ID, AZURE_RESOURCE_GROUP, AZURE_STATIC_WEB_APP_NAME
-    } = process.env;
-
-    const credential = new ClientSecretCredential(AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET);
-    const token = await credential.getToken("https://management.azure.com/.default");
-
-    const url = `https://management.azure.com/subscriptions/${AZURE_SUBSCRIPTION_ID}` +
-                `/resourceGroups/${AZURE_RESOURCE_GROUP}` +
-                `/providers/Microsoft.Web/staticSites/${AZURE_STATIC_WEB_APP_NAME}` +
-                `/users/${encodeURIComponent(authProvider)}/${encodeURIComponent(userId)}?api-version=${API_VERSION}`;
-
-    const body = { properties: { provider: authProvider, userId, roles: rolesString } };
-    if (displayName) body.properties.displayName = displayName;
-
-    const resp = await fetch(url, {
-      method: "PUT",
-      headers: { Authorization: `Bearer ${token.token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
-
-    if (!resp.ok) throw new Error(`Update user failed ${resp.status}: ${await resp.text().catch(()=>"")}`);
-    const data = await resp.json();
-
-    context.res = {
-      status: 200,
-      body: {
-        id: data.name,
-        provider: data.properties?.provider,
-        userId: data.properties?.userId,
-        displayName: data.properties?.displayName,
-        roles: data.properties?.roles || ""
-      }
-    };
+    // Just echo input for now.
+    const body = req.body || {};
+    context.res = { status: 200, body: { ok: true, received: body, resourceId } };
   } catch (err) {
-    context.res = { status: 500, body: { error: err.message } };
+    context.log.error("manageUsersUpdate fatal", err);
+    context.res = { status: 500, body: { error: err.message || "Update failed" } };
   }
 };
