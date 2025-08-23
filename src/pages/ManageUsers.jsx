@@ -23,6 +23,7 @@ function useQuery() {
   return useMemo(() => new URLSearchParams(window.location.search), []);
 }
 
+
 export default function AdminUsers() {
   const qs = useQuery();
   const debugMode = qs.has("debug");
