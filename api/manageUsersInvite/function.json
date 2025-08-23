@@ -5,14 +5,10 @@
       "type": "httpTrigger",
       "direction": "in",
       "name": "req",
-      "methods": [ "patch", "post" ],
-      "route": "manageUsers/update"
+      "methods": [ "post" ],
+      "route": "manageUsers/invite"
     },
-    {
-      "type": "http",
-      "direction": "out",
-      "name": "res"
-    }
+    { "type": "http", "direction": "out", "name": "res" }
   ],
   "scriptFile": "index.js"
 }

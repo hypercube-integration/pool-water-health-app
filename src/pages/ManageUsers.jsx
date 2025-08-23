@@ -1,208 +1,272 @@
 import React, { useEffect, useMemo, useState } from "react";
 
-/**
- * Normalise a SWA user coming from different ARM shapes.
- * - New shape: { id, name, properties: { displayName, provider, userId, roles } }
- * - Old shape: { displayName, provider, userId, roles }
- */
-function normalizeUser(u) {
-  const p = u?.properties || {};
-  const displayName = p.displayName ?? u.displayName ?? "";
-  const provider = p.provider ?? u.provider ?? "";
-  const userId = p.userId ?? u.userId ?? u.name ?? "";
-  const rolesRaw = p.roles ?? u.roles ?? "";
-  const roles = rolesRaw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .join(", ");
-  return { displayName, provider, userId, roles, _raw: u };
-}
-
-function useQuery() {
-  return useMemo(() => new URLSearchParams(window.location.search), []);
-}
-
+const qs = (o) =>
+  "?" +
+  Object.entries(o)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join("&");
 
 export default function AdminUsers() {
-  const qs = useQuery();
-  const debugMode = qs.has("debug");
-
-  const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState([]);
-  const [debug, setDebug] = useState(null);
-  const [error, setError] = useState(null);
-  const [requestId, setRequestId] = useState("");
-  const [timingMs, setTimingMs] = useState(null);
-  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteForm, setInviteForm] = useState({
+    provider: "github",
+    userId: "",
+    email: "",
+    roles: "authenticated",
+    expirationHours: 48,
+    domain: ""
+  });
+  const [inviteResult, setInviteResult] = useState(null);
 
-  const fetchUsers = async () => {
+  const providers = useMemo(() => ["github", "aad", "google", "twitter"], []);
+
+  const load = async () => {
     setLoading(true);
-    setError(null);
-    setDebug(null);
-    setTimingMs(null);
-    setStatus(null);
-    setRequestId("");
-
-    const ts = Date.now();
-    const url = `/api/manageUsers?ts=${ts}${debugMode ? "&debug=1" : ""}`;
+    setErr(null);
     try {
-      const res = await fetch(url, { method: "GET", cache: "no-store" });
-      setStatus(res.status);
-      setTimingMs(performance.now() - performance.timeOrigin - performance.now() + performance.now()); // keep simple
-
-      // try to pull a server-provided request id if any (middleware or app svc)
-      const reqId =
-        res.headers.get("x-ms-request-id") ||
-        res.headers.get("x-ms-correlation-request-id") ||
-        res.headers.get("x-request-id") ||
-        "";
-      setRequestId(reqId);
-
-      const text = await res.text();
-      let data;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch {
-        data = null;
-      }
-
-      if (!res.ok) {
-        setError(
-          data?.error ||
-            `HTTP ${res.status}${data && typeof data === "object" ? " (see debug)" : ""}`
-        );
-        if (debugMode) setDebug(data);
-        setUsers([]);
-        return;
-      }
-
-      // API returns either an array of users or { users, debug }
-      let arr = Array.isArray(data) ? data : Array.isArray(data?.users) ? data.users : [];
-      if (debugMode && data?.debug) setDebug(data.debug);
-
-      setUsers(arr.map(normalizeUser));
+      const res = await fetch("/api/manageUsers");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setUsers(Array.isArray(data) ? data : []);
     } catch (e) {
-      setError(e.message || "Request failed");
-      setUsers([]);
+      setErr(String(e));
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchUsers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debugMode]);
+  useEffect(() => { load(); }, []);
+
+  const saveRoles = async (u, newRoles) => {
+    const body = {
+      provider: u.properties.provider,
+      userId: u.properties.userId,
+      roles: newRoles
+    };
+    const res = await fetch("/api/manageUsers/update", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(`Update failed: ${res.status}`);
+  };
+
+  const deleteUser = async (u) => {
+    const res = await fetch("/api/manageUsers/delete", {
+      method: "POST", // allow browsers that block DELETE w/ body; function also accepts DELETE
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: u.properties.provider, userId: u.properties.userId })
+    });
+    if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+  };
+
+  const onChangeRoles = async (u, rolesStr) => {
+    try {
+      await saveRoles(u, rolesStr);
+      await load();
+    } catch (e) {
+      alert(String(e));
+    }
+  };
+
+  const onDelete = async (u) => {
+    if (!confirm(`Delete user "${u.properties.displayName}"?`)) return;
+    try {
+      await deleteUser(u);
+      await load();
+    } catch (e) {
+      alert(String(e));
+    }
+  };
+
+  const openInvite = () => {
+    setInviteOpen(true);
+    setInviteResult(null);
+  };
+  const closeInvite = () => setInviteOpen(false);
+
+  const submitInvite = async (e) => {
+    e.preventDefault();
+    setInviteResult(null);
+    try {
+      const res = await fetch("/api/manageUsers/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(inviteForm)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(JSON.stringify(data));
+      setInviteResult(data);
+    } catch (err) {
+      setInviteResult({ error: String(err) });
+    }
+  };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <a href="#/admin" className="text-blue-400 hover:underline">
-        ← Back to Admin
-      </a>
-
-      <h1 className="text-4xl font-extrabold mt-4 mb-2">User &amp; Role Management</h1>
-
-      <div className="flex items-center gap-3 mb-4">
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-semibold">User &amp; Role Management</h1>
         <button
-          onClick={fetchUsers}
-          className="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+          className="px-3 py-2 rounded bg-black text-white"
+          onClick={openInvite}
+        >
+          Invite User
+        </button>
+      </div>
+
+      <div className="mb-4">
+        <button
+          className="px-3 py-2 rounded border"
+          onClick={load}
           disabled={loading}
         >
           {loading ? "Loading…" : "Refresh"}
         </button>
-
-        <a
-          href="/api/manageUsers"
-          target="_blank"
-          rel="noreferrer"
-          className="text-blue-400 hover:underline"
-        >
-          Open raw API
-        </a>
-
-        <span className="text-sm text-gray-400">
-          Append <code>?debug=1</code> to this page to see the panel.
-        </span>
       </div>
 
-      <StatusBar status={status} timingMs={timingMs} requestId={requestId} />
-
-      {error && (
-        <div className="my-3 rounded border border-red-700 bg-red-900 text-red-100 p-3">
-          <div className="font-semibold">ERROR</div>
-          <div className="text-sm">{error}</div>
+      {err && (
+        <div className="p-3 border border-red-400 bg-red-50 text-red-700 rounded mb-4">
+          {err}
         </div>
       )}
 
-      <UsersTable users={users} />
-
-      {debugMode && (
-        <details className="mt-6">
-          <summary className="cursor-pointer font-semibold">Debug</summary>
-          <pre className="mt-2 p-3 rounded bg-black/40 overflow-auto text-xs">
-            {JSON.stringify(debug, null, 2)}
-          </pre>
-        </details>
-      )}
-    </div>
-  );
-}
-
-function StatusBar({ status, timingMs, requestId }) {
-  if (!status && !timingMs && !requestId) return null;
-  return (
-    <div className="text-sm text-gray-300 mb-3">
-      <span className="mr-4">
-        <strong>status:</strong> {status ?? "—"}
-      </span>
-      <span className="mr-4">
-        <strong>time:</strong> {timingMs ? `${Math.round(timingMs)} ms` : "—"}
-      </span>
-      <span className="mr-4">
-        <strong>req id:</strong> {requestId || "—"}
-      </span>
-    </div>
-  );
-}
-
-function UsersTable({ users }) {
-  return (
-    <div className="mt-2">
-      <div className="mb-2 font-semibold">Display Name&nbsp;&nbsp;Provider&nbsp;&nbsp;User ID&nbsp;&nbsp;Roles</div>
-      {users.length === 0 ? (
-        <div className="text-gray-400">No users to display.</div>
-      ) : (
-        <div className="overflow-auto rounded border border-gray-700">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-800">
+      <div className="overflow-x-auto border rounded">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="text-left p-2">Display Name</th>
+              <th className="text-left p-2">Provider</th>
+              <th className="text-left p-2">User ID</th>
+              <th className="text-left p-2">Roles</th>
+              <th className="text-left p-2">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.length === 0 && (
               <tr>
-                <Th>Display Name</Th>
-                <Th>Provider</Th>
-                <Th>User ID</Th>
-                <Th>Roles</Th>
+                <td colSpan="5" className="p-4 text-center text-gray-500">
+                  No users to display.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={`${u.provider}:${u.userId}`} className="odd:bg-gray-900 even:bg-gray-850">
-                  <Td>{u.displayName}</Td>
-                  <Td>{u.provider}</Td>
-                  <Td className="font-mono">{u.userId}</Td>
-                  <Td>{u.roles}</Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            )}
+            {users.map((u) => (
+              <tr key={u.id} className="border-t">
+                <td className="p-2">{u.properties?.displayName || u.name}</td>
+                <td className="p-2">{u.properties?.provider}</td>
+                <td className="p-2 font-mono text-xs">{u.properties?.userId || u.name}</td>
+                <td className="p-2">
+                  <input
+                    defaultValue={u.properties?.roles || ""}
+                    onBlur={(e) => onChangeRoles(u, e.target.value)}
+                    className="w-full border rounded px-2 py-1"
+                    placeholder="comma,separated,roles"
+                    title="Edit roles and tab/click out to save"
+                  />
+                </td>
+                <td className="p-2">
+                  <button
+                    className="px-2 py-1 rounded border hover:bg-gray-50"
+                    onClick={() => onDelete(u)}
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Invite modal */}
+      {inviteOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg">
+            <h2 className="text-xl font-semibold mb-4">Invite User</h2>
+            <form onSubmit={submitInvite} className="space-y-3">
+              <div className="flex gap-2">
+                <label className="w-32 pt-2">Provider</label>
+                <select
+                  className="flex-1 border rounded px-2 py-1"
+                  value={inviteForm.provider}
+                  onChange={(e) => setInviteForm(f => ({ ...f, provider: e.target.value }))}
+                >
+                  {providers.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <label className="w-32 pt-2">User ID</label>
+                <input
+                  className="flex-1 border rounded px-2 py-1"
+                  placeholder="e.g. internal-id-or-handle"
+                  value={inviteForm.userId}
+                  onChange={(e) => setInviteForm(f => ({ ...f, userId: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="flex gap-2">
+                <label className="w-32 pt-2">Email</label>
+                <input
+                  type="email"
+                  className="flex-1 border rounded px-2 py-1"
+                  placeholder="invitee@example.com"
+                  value={inviteForm.email}
+                  onChange={(e) => setInviteForm(f => ({ ...f, email: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="flex gap-2">
+                <label className="w-32 pt-2">Roles</label>
+                <input
+                  className="flex-1 border rounded px-2 py-1"
+                  placeholder="comma,separated,roles"
+                  value={inviteForm.roles}
+                  onChange={(e) => setInviteForm(f => ({ ...f, roles: e.target.value }))}
+                />
+              </div>
+              <div className="flex gap-2">
+                <label className="w-32 pt-2">Expires (hrs)</label>
+                <input
+                  type="number"
+                  min="1"
+                  className="flex-1 border rounded px-2 py-1"
+                  value={inviteForm.expirationHours}
+                  onChange={(e) => setInviteForm(f => ({ ...f, expirationHours: e.target.value }))}
+                />
+              </div>
+              <div className="flex gap-2">
+                <label className="w-32 pt-2">Domain (opt)</label>
+                <input
+                  className="flex-1 border rounded px-2 py-1"
+                  placeholder="shown on invite UI"
+                  value={inviteForm.domain}
+                  onChange={(e) => setInviteForm(f => ({ ...f, domain: e.target.value }))}
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end pt-2">
+                <button type="button" className="px-3 py-2 rounded border" onClick={closeInvite}>Close</button>
+                <button className="px-3 py-2 rounded bg-black text-white">Create Invite</button>
+              </div>
+            </form>
+
+            {inviteResult && (
+              <div className="mt-4 p-3 border rounded bg-gray-50">
+                <pre className="text-xs overflow-x-auto">{JSON.stringify(inviteResult, null, 2)}</pre>
+                {inviteResult?.properties?.inviteUrl && (
+                  <div className="mt-2">
+                    <a className="text-blue-700 underline break-all" href={inviteResult.properties.inviteUrl} target="_blank" rel="noreferrer">
+                      Open Invite Link
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
   );
 }
-
-const Th = ({ children }) => (
-  <th className="text-left py-2 px-3 font-semibold border-b border-gray-700">{children}</th>
-);
-const Td = ({ children, className = "" }) => (
-  <td className={`py-2 px-3 align-top border-b border-gray-800 ${className}`}>{children}</td>
-);
