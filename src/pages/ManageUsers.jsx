@@ -1,556 +1,477 @@
+// src/pages/ManageUsers.jsx
 import React, { useEffect, useMemo, useState } from "react";
 
-/** Utilities */
-const toArray = (roles) =>
-  (Array.isArray(roles) ? roles : String(roles || ""))
-    .split(",")
-    .map((r) => r.trim())
-    .filter(Boolean);
+/* -------------------------------------------------------
+   Helpers
+------------------------------------------------------- */
 
-const toCSV = (rolesArr) =>
-  (rolesArr || [])
-    .map((r) => String(r || "").trim())
-    .filter(Boolean)
-    .join(",");
+// Normalize roles coming from ARM (can be string, array, or undefined)
+function toRoleArray(val) {
+  if (Array.isArray(val)) return val.filter(Boolean);
+  if (typeof val === "string") {
+    return val
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
 
-const uniq = (arr) => Array.from(new Set(arr || []));
-const hasAdmin = (roles) => toArray(roles).some((r) => r.toLowerCase() === "admin");
+// Make a nice, consistent label for providers
+function labelForProvider(p) {
+  if (!p) return "";
+  const map = { github: "GitHub", aad: "Microsoft Entra (AAD)", twitter: "Twitter", facebook: "Facebook", google: "Google" };
+  return map[p.toLowerCase()] || p;
+}
 
-/** Default role catalog you use in SWA */
-const DEFAULT_ROLE_OPTIONS = [
-  "admin",
-  "contributor",
-  "writer",
-  "editor",
-  "deleter",
-  "exporter",
-  "authenticated",
-  "anonymous",
-];
+// Catalog of roles your app uses. Change here to add/remove roles shown in editor.
+const ROLE_CATALOG = ["admin", "writer", "editor", "deleter", "exporter", "authenticated", "anonymous"];
 
-/** Modal (no external libs) */
-function Modal({ open, title, children, onClose }) {
-  if (!open) return null;
+/* -------------------------------------------------------
+   Tiny UI bits (unstyled, light theme)
+------------------------------------------------------- */
+
+function Chip({ children }) {
   return (
-    <div style={m.backdrop} onClick={onClose} role="dialog" aria-modal="true">
-      <div style={m.panel} onClick={(e) => e.stopPropagation()}>
-        <div style={m.header}>
-          <h3 style={{ margin: 0, fontSize: 18 }}>{title}</h3>
-          <button onClick={onClose} style={m.iconBtn} aria-label="Close">✕</button>
-        </div>
-        <div style={m.body}>{children}</div>
-      </div>
-    </div>
+    <span
+      style={{
+        display: "inline-block",
+        padding: "2px 8px",
+        fontSize: 12,
+        background: "#eef2ff",
+        color: "#1e3a8a",
+        border: "1px solid #c7d2fe",
+        borderRadius: 999,
+        marginRight: 6,
+        marginBottom: 6,
+      }}
+    >
+      {children}
+    </span>
   );
 }
 
-/** Main component */
-export default function UsersAdmin() {
-  const [users, setUsers] = useState([]);
-  const [auth, setAuth] = useState(null);
+function Button({ children, kind = "primary", ...rest }) {
+  const palette =
+    kind === "primary"
+      ? { bg: "#2563eb", b: "#1d4ed8", fg: "#fff", hover: "#1d4ed8" }
+      : kind === "ghost"
+      ? { bg: "transparent", b: "#cbd5e1", fg: "#111827", hover: "#f3f4f6" }
+      : { bg: "#ef4444", b: "#dc2626", fg: "#fff", hover: "#dc2626" }; // danger
+
+  return (
+    <button
+      {...rest}
+      style={{
+        background: palette.bg,
+        color: palette.fg,
+        border: `1px solid ${palette.b}`,
+        borderRadius: 8,
+        padding: "6px 10px",
+        fontSize: 14,
+        cursor: "pointer",
+      }}
+      onMouseOver={(e) => (e.currentTarget.style.background = palette.hover)}
+      onMouseOut={(e) => (e.currentTarget.style.background = palette.bg)}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* -------------------------------------------------------
+   Main page
+------------------------------------------------------- */
+
+export default function ManageUsers() {
   const [loading, setLoading] = useState(true);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [statusMessage, setStatusMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
 
-  // Modal state
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState(null); // entire user object
-  const [selectedRoles, setSelectedRoles] = useState([]); // array of strings
+  const [auth, setAuth] = useState(null); // /.auth/me
+  const [isAdmin, setIsAdmin] = useState(false);
 
+  const [rows, setRows] = useState([]); // normalized users
+  const [editRow, setEditRow] = useState(null); // { ...row, nextRoles: [] }
+
+  const search =
+    typeof window !== "undefined" && window.location && window.location.search
+      ? window.location.search
+      : "";
+  const debug = new URLSearchParams(search).get("debug");
+
+  // Fetch auth principal to decide if current user is admin
   useEffect(() => {
+    let cancelled = false;
     (async () => {
-      await loadAuth();
-      await fetchUsers();
+      try {
+        const meRes = await fetch("/.auth/me", { credentials: "include" });
+        if (!meRes.ok) throw new Error(`/.auth/me failed ${meRes.status}`);
+        const meJson = await meRes.json();
+        if (cancelled) return;
+
+        const principal = Array.isArray(meJson) ? meJson[0] : meJson;
+        setAuth(principal || null);
+
+        const roles = toRoleArray(principal?.userRoles);
+        setIsAdmin(roles.includes("admin"));
+      } catch (e) {
+        // If /.auth/me fails, treat as not admin
+        setAuth(null);
+        setIsAdmin(false);
+      }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const clientPrincipal = useMemo(() => auth?.clientPrincipal || null, [auth]);
-  const userRoles = useMemo(() => uniq(clientPrincipal?.userRoles || []), [clientPrincipal]);
-  const isAdmin = useMemo(() => hasAdmin(userRoles), [userRoles]);
+  // Fetch users from your API
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setErr(null);
 
-  // Build role catalog from defaults + anything we see attached to users
-  const dynamicRoles = useMemo(() => {
-    const found = new Set(DEFAULT_ROLE_OPTIONS.map((r) => r.toLowerCase()));
-    for (const u of users) {
-      const csv = u?.properties?.roles || "";
-      for (const r of toArray(csv)) found.add(r.toLowerCase());
-    }
-    // Keep "admin" at top, then alphabetical
-    const arr = Array.from(found);
-    arr.sort((a, b) => {
-      if (a === "admin") return -1;
-      if (b === "admin") return 1;
-      return a.localeCompare(b);
+    (async () => {
+      try {
+        const url = debug ? `/api/manageUsers?debug=1` : `/api/manageUsers`;
+        const res = await fetch(url, { method: "GET" });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`GET /api/manageUsers failed ${res.status}: ${text}`);
+        }
+        const json = await res.json();
+        if (cancelled) return;
+
+        const normalized = (Array.isArray(json) ? json : []).map((u) => {
+          const provider = u.properties?.provider ?? u.provider ?? "";
+          const userId = u.properties?.userId ?? u.userId ?? u.name ?? "";
+          const display = u.properties?.displayName ?? u.displayName ?? userId;
+          const rolesArr = toRoleArray(u.properties?.roles ?? u.roles);
+
+          return {
+            key: `${provider}:${userId}`,
+            provider,
+            providerLabel: labelForProvider(provider),
+            userId,
+            displayName: display,
+            roles: rolesArr, // store as array
+            raw: u,
+          };
+        });
+
+        // Sort by provider then displayName for stable, pleasant UI
+        normalized.sort((a, b) => {
+          if (a.provider === b.provider) return a.displayName.localeCompare(b.displayName);
+          return a.provider.localeCompare(b.provider);
+        });
+
+        setRows(normalized);
+      } catch (e) {
+        setErr(e.message || String(e));
+        setRows([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debug]);
+
+  const onEdit = (row) => {
+    setErr(null);
+    setEditRow({
+      ...row,
+      nextRoles: [...row.roles], // start with current roles
     });
-    return arr;
-  }, [users]);
+  };
 
-  async function loadAuth() {
-    try {
-      setAuthLoading(true);
-      const res = await fetch("/.auth/me", { credentials: "include" });
-      if (res.status === 204) {
-        setAuth(null);
-        return;
-      }
-      if (!res.ok) throw new Error(`/.auth/me failed: ${res.status}`);
-      const data = await res.json();
-      setAuth(data || null);
-    } catch (e) {
-      console.error("auth load error", e);
-      setAuth(null);
-    } finally {
-      setAuthLoading(false);
-    }
-  }
+  const onToggleRole = (role) => {
+    if (!editRow) return;
+    const set = new Set(editRow.nextRoles);
+    if (set.has(role)) set.delete(role);
+    else set.add(role);
+    setEditRow({ ...editRow, nextRoles: Array.from(set) });
+  };
 
-  async function fetchUsers() {
-    try {
-      setLoading(true);
-      setError("");
-      const res = await fetch("/api/manageUsers", { credentials: "include" });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`Fetch users failed: ${res.status} ${txt}`);
-      }
-      const data = await res.json();
-      setUsers(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error(e);
-      setError("Failed to load users.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const onCancelEdit = () => {
+    setEditRow(null);
+  };
 
-  /** Open modal for a user */
-  function openEditor(u) {
-    if (!isAdmin) {
-      setError("You don't have permission to edit roles.");
-      return;
-    }
-    setEditingUser(u);
-    setSelectedRoles(toArray(u?.properties?.roles || ""));
-    setEditorOpen(true);
-  }
+  const onSave = async () => {
+    if (!editRow) return;
 
-  /** Toggle checkbox */
-  function toggleRole(role) {
-    const rl = role.trim();
-    setSelectedRoles((prev) =>
-      prev.includes(rl) ? prev.filter((r) => r !== rl) : [...prev, rl]
-    );
-  }
-
-  /** Save roles (PATCH) */
-  async function saveRoles() {
-    if (!isAdmin || !editingUser) return;
-
-    const up = editingUser.properties || {};
-    const provider = up.provider;
-    const userId = up.userId;
-
-    if (!provider || !userId) {
-      setError("Internal error: missing provider or userId.");
+    // Basic guard; API expects provider, userId, roles (CSV)
+    if (!editRow.provider || !editRow.userId) {
+      setErr("provider and userId are required.");
       return;
     }
 
-    const rolesCsv = toCSV(selectedRoles);
+    const payload = {
+      provider: editRow.provider,
+      userId: editRow.userId,
+      roles: Array.isArray(editRow.nextRoles)
+        ? editRow.nextRoles.join(",")
+        : String(editRow.nextRoles || ""),
+    };
 
+    setSaving(true);
+    setErr(null);
     try {
-      setStatusMessage("Updating…");
-      setError("");
       const res = await fetch("/api/manageUsers/update", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ provider, userId, roles: rolesCsv }),
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
       });
-      const txt = await res.text();
+
       if (!res.ok) {
-        throw new Error(`Update failed: ${res.status} ${txt}`);
+        const t = await res.text();
+        throw new Error(`Update failed: ${res.status} ${t}`);
       }
-      setStatusMessage("Roles updated.");
-      setEditorOpen(false);
-      setEditingUser(null);
-      await fetchUsers();
+
+      // Success: update local row roles
+      const updated = rows.map((r) =>
+        r.key === editRow.key ? { ...r, roles: [...editRow.nextRoles] } : r
+      );
+      setRows(updated);
+      setEditRow(null);
     } catch (e) {
-      console.error(e);
-      setError(e.message || "Update failed.");
+      setErr(e.message || String(e));
     } finally {
-      setTimeout(() => setStatusMessage(""), 2000);
+      setSaving(false);
     }
-  }
+  };
 
-  /** Delete user */
-  async function deleteUser(u) {
-    if (!isAdmin) {
-      setError("You don't have permission to delete users.");
-      return;
-    }
-    const up = u?.properties || {};
-    const provider = up.provider;
-    const userId = up.userId;
-    if (!provider || !userId) {
-      setError("Internal error: missing provider or userId.");
-      return;
+  const tableBody = useMemo(() => {
+    if (loading) {
+      return (
+        <tr>
+          <td colSpan={5} style={{ padding: 16, textAlign: "center", color: "#6b7280" }}>
+            Loading users…
+          </td>
+        </tr>
+      );
     }
 
-    if (!confirm(`Remove "${up.displayName || userId}" from this Static Web App?`)) return;
-
-    try {
-      setStatusMessage("Deleting…");
-      setError("");
-      const res = await fetch("/api/manageUsers/delete", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ provider, userId }),
-      });
-      const txt = await res.text();
-      if (!res.ok) throw new Error(`Delete failed: ${res.status} ${txt}`);
-      setStatusMessage("User deleted.");
-      await fetchUsers();
-    } catch (e) {
-      console.error(e);
-      setError(e.message || "Delete failed.");
-    } finally {
-      setTimeout(() => setStatusMessage(""), 2000);
+    if (err) {
+      return (
+        <tr>
+          <td colSpan={5} style={{ padding: 16, color: "#b91c1c", background: "#fef2f2" }}>
+            Error: {err}
+          </td>
+        </tr>
+      );
     }
-  }
 
-  const s = styles;
+    if (!rows.length) {
+      return (
+        <tr>
+          <td colSpan={5} style={{ padding: 16, textAlign: "center", color: "#6b7280" }}>
+            No users to display.
+          </td>
+        </tr>
+      );
+    }
+
+    return rows.map((r) => (
+      <tr key={r.key} style={{ borderTop: "1px solid #e5e7eb" }}>
+        <td style={{ padding: 12 }}>{r.displayName}</td>
+        <td style={{ padding: 12 }}>{r.providerLabel}</td>
+        <td style={{ padding: 12, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace", fontSize: 12 }}>
+          {r.userId}
+        </td>
+        <td style={{ padding: 12 }}>
+          {r.roles.length ? r.roles.map((role) => <Chip key={role}>{role}</Chip>) : <span style={{ color: "#6b7280" }}>—</span>}
+        </td>
+        <td style={{ padding: 12, textAlign: "right" }}>
+          <Button
+            kind="ghost"
+            disabled={!isAdmin}
+            onClick={() => onEdit(r)}
+            title={isAdmin ? "Edit roles" : "Admins only"}
+          >
+            Edit
+          </Button>
+        </td>
+      </tr>
+    ));
+  }, [rows, loading, err, isAdmin]);
 
   return (
-    <div style={s.page}>
-      <header style={s.header}>
-        <h1 style={s.h1}>User & Role Management</h1>
-        <button onClick={fetchUsers} disabled={loading} style={s.primaryBtn}>
-          {loading ? "Refreshing…" : "Refresh"}
-        </button>
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "24px 16px" }}>
+      <header style={{ marginBottom: 16 }}>
+        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: "#111827" }}>
+          User & Role Management
+        </h1>
+        <p style={{ margin: "6px 0 0", color: "#6b7280" }}>
+          View and edit application roles for authenticated users.
+        </p>
       </header>
 
-      <section style={s.topMeta}>
-        {authLoading ? (
-          <div style={s.muted}>Checking your permissions…</div>
-        ) : clientPrincipal ? (
-          <div style={s.metaRow}>
-            <span>
-              Signed in as <strong>{clientPrincipal.userDetails}</strong>
-            </span>
-            <span style={isAdmin ? s.badgeAdmin : s.badgeViewOnly}>
-              {isAdmin ? "Admin" : "View-only"}
-            </span>
+      <div
+        style={{
+          background: "#ffffff",
+          border: "1px solid #e5e7eb",
+          borderRadius: 12,
+          overflow: "hidden",
+          boxShadow:
+            "0 1px 1px rgba(0,0,0,0.04), 0 2px 2px rgba(0,0,0,0.04), 0 4px 4px rgba(0,0,0,0.04)",
+        }}
+      >
+        <div style={{ padding: 12, borderBottom: "1px solid #e5e7eb", background: "#f9fafb" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ color: "#374151", fontWeight: 600 }}>Users</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {debug && (
+                <a
+                  href="/api/manageUsers?debug=1"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ fontSize: 12, color: "#1d4ed8", textDecoration: "underline" }}
+                >
+                  Open raw API (debug)
+                </a>
+              )}
+              <Button kind="ghost" onClick={() => window.location.reload()}>
+                Refresh
+              </Button>
+            </div>
           </div>
-        ) : (
-          <div style={s.errorText}>You are not signed in.</div>
-        )}
-      </section>
-
-      {!isAdmin && clientPrincipal && (
-        <div style={s.banner}>
-          You have view-only access. Ask an admin to grant the <code>admin</code> role to edit or delete users.
         </div>
-      )}
 
-      {statusMessage && <div style={s.statusOk}>{statusMessage}</div>}
-      {error && <div style={s.statusErr}>{error}</div>}
-
-      <div style={s.card}>
-        {loading ? (
-          <p style={s.muted}>Loading users…</p>
-        ) : users.length === 0 ? (
-          <p style={s.muted}>No users to display.</p>
-        ) : (
-          <table style={s.table}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
-              <tr>
-                <th style={s.th}>Display Name</th>
-                <th style={s.th}>Provider</th>
-                <th style={s.th}>User ID</th>
-                <th style={s.th}>Roles</th>
-                {isAdmin && <th style={s.th} />}
+              <tr style={{ background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
+                <th style={thStyle}>Display Name</th>
+                <th style={thStyle}>Provider</th>
+                <th style={thStyle}>User ID</th>
+                <th style={thStyle}>Roles</th>
+                <th style={{ ...thStyle, textAlign: "right" }}>Actions</th>
               </tr>
             </thead>
-            <tbody>
-              {users.map((u) => {
-                const up = u.properties || {};
-                return (
-                  <tr key={u.id}>
-                    <td style={s.td}>{up.displayName || "—"}</td>
-                    <td style={s.td}>{up.provider || "—"}</td>
-                    <td style={{ ...s.td, fontFamily: "monospace" }}>{up.userId || "—"}</td>
-                    <td style={s.td}>{toCSV(toArray(up.roles)) || "—"}</td>
-                    {isAdmin && (
-                      <td style={s.tdRight}>
-                        <button style={s.smallGhost} onClick={() => openEditor(u)}>
-                          Edit
-                        </button>
-                        <button style={s.smallDanger} onClick={() => deleteUser(u)}>
-                          Delete
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
+            <tbody>{tableBody}</tbody>
           </table>
-        )}
+        </div>
       </div>
 
-      {/* Roles editor modal */}
-      <Modal
-        open={editorOpen}
-        title={
-          editingUser
-            ? `Edit roles: ${editingUser?.properties?.displayName || editingUser?.properties?.userId || ""}`
-            : "Edit roles"
-        }
-        onClose={() => setEditorOpen(false)}
-      >
-        {editingUser ? (
-          <>
-            <div style={{ marginBottom: 8, color: "#64748b" }}>
-              <div>
-                <strong>Provider:</strong> {editingUser?.properties?.provider}
-              </div>
-              <div style={{ wordBreak: "break-all" }}>
-                <strong>User ID:</strong> <span style={{ fontFamily: "monospace" }}>{editingUser?.properties?.userId}</span>
+      {/* Edit Drawer / Modal */}
+      {editRow && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 50,
+          }}
+          onClick={(e) => {
+            // click backdrop to close
+            if (e.target === e.currentTarget) onCancelEdit();
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 560,
+              background: "#fff",
+              borderRadius: 12,
+              border: "1px solid #e5e7eb",
+              boxShadow:
+                "0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1)",
+            }}
+          >
+            <div style={{ padding: 16, borderBottom: "1px solid #e5e7eb" }}>
+              <div style={{ fontWeight: 700, color: "#111827" }}>Edit roles</div>
+              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+                {editRow.displayName} • {labelForProvider(editRow.provider)} •{" "}
+                <span
+                  style={{
+                    fontFamily:
+                      "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+                  }}
+                >
+                  {editRow.userId}
+                </span>
               </div>
             </div>
 
-            <div style={s.rolesGrid}>
-              {dynamicRoles.map((r) => {
-                const id = `role_${r}`;
-                return (
-                  <label key={r} htmlFor={id} style={s.roleItem}>
-                    <input
-                      id={id}
-                      type="checkbox"
-                      checked={selectedRoles.includes(r)}
-                      onChange={() => toggleRole(r)}
-                    />
-                    <span style={{ marginLeft: 8, textTransform: "none" }}>{r}</span>
-                  </label>
-                );
-              })}
+            <div style={{ padding: 16 }}>
+              <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
+                <legend style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: "#374151" }}>
+                  Select roles
+                </legend>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                  {ROLE_CATALOG.map((role) => {
+                    const checked = editRow.nextRoles.includes(role);
+                    const id = `role-${role}`;
+                    return (
+                      <label
+                        key={role}
+                        htmlFor={id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "6px 8px",
+                          border: "1px solid #e5e7eb",
+                          borderRadius: 8,
+                          cursor: "pointer",
+                          background: checked ? "#eff6ff" : "#fff",
+                        }}
+                      >
+                        <input
+                          id={id}
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => onToggleRole(role)}
+                        />
+                        <span style={{ textTransform: "capitalize" }}>{role}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p style={{ color: "#6b7280", fontSize: 12, marginTop: 8 }}>
+                  Tip: “admin” implicitly allows access to all admin-only APIs and pages.
+                </p>
+              </fieldset>
             </div>
 
-            <div style={s.roleActions}>
-              <button
-                style={s.smallGhost}
-                onClick={() => setSelectedRoles(dynamicRoles.filter((r) => r !== "anonymous"))}
-              >
-                Select common
-              </button>
-              <button style={s.smallGhost} onClick={() => setSelectedRoles([])}>
-                Clear all
-              </button>
-              <div style={{ flex: 1 }} />
-              <button style={s.smallPrimary} onClick={saveRoles}>
-                Save
-              </button>
-              <button
-                style={s.smallGhost}
-                onClick={() => {
-                  setEditorOpen(false);
-                  setEditingUser(null);
-                }}
-              >
+            <div
+              style={{
+                padding: 12,
+                borderTop: "1px solid #e5e7eb",
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 8,
+              }}
+            >
+              <Button kind="ghost" onClick={onCancelEdit} disabled={saving}>
                 Cancel
-              </button>
+              </Button>
+              <Button onClick={onSave} disabled={saving}>
+                {saving ? "Saving…" : "Save"}
+              </Button>
             </div>
-          </>
-        ) : null}
-      </Modal>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-/** Light theme styles */
-const styles = {
-  page: {
-    padding: "24px",
-    maxWidth: 1200,
-    margin: "0 auto",
-    fontFamily: "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif",
-    color: "#1f2937",
-    background: "#f8fafc",
-    minHeight: "100vh",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "baseline",
-    marginBottom: 8,
-  },
-  h1: { margin: 0, fontSize: 24, fontWeight: 700, color: "#0f172a" },
-  topMeta: { marginBottom: 16 },
-  metaRow: { display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "#475569" },
-  muted: { color: "#64748b" },
-  badgeAdmin: {
-    fontSize: 12,
-    padding: "2px 8px",
-    borderRadius: 999,
-    background: "#dcfce7",
-    color: "#065f46",
-    border: "1px solid #bbf7d0",
-  },
-  badgeViewOnly: {
-    fontSize: 12,
-    padding: "2px 8px",
-    borderRadius: 999,
-    background: "#f1f5f9",
-    color: "#334155",
-    border: "1px solid #e2e8f0",
-  },
-  banner: {
-    background: "#fff8e1",
-    border: "1px solid #ffe0a3",
-    color: "#8a6d3b",
-    padding: "10px 12px",
-    borderRadius: 8,
-    marginBottom: 16,
-    fontSize: 14,
-  },
-  statusOk: { color: "#16a34a", marginBottom: 12, fontWeight: 500 },
-  statusErr: {
-    color: "#b91c1c",
-    marginBottom: 12,
-    whiteSpace: "pre-wrap",
-    background: "#fef2f2",
-    border: "1px solid #fee2e2",
-    padding: "10px 12px",
-    borderRadius: 8,
-    fontSize: 14,
-  },
-  card: {
-    background: "#fff",
-    border: "1px solid #e5e7eb",
-    borderRadius: 12,
-    padding: 16,
-    boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-  },
-  table: { width: "100%", borderCollapse: "collapse" },
-  th: {
-    textAlign: "left",
-    padding: "10px 12px",
-    borderBottom: "1px solid #e5e7eb",
-    background: "#f9fafb",
-    color: "#334155",
-    fontWeight: 600,
-    fontSize: 13,
-  },
-  td: {
-    padding: "10px 12px",
-    borderBottom: "1px solid #f1f5f9",
-    fontSize: 14,
-    verticalAlign: "top",
-  },
-  tdRight: {
-    padding: "10px 12px",
-    borderBottom: "1px solid #f1f5f9",
-    textAlign: "right",
-    width: 160,
-    whiteSpace: "nowrap",
-    display: "flex",
-    justifyContent: "flex-end",
-    gap: 8,
-  },
-  primaryBtn: {
-    background: "#2563eb",
-    color: "#fff",
-    border: "1px solid #1d4ed8",
-    borderRadius: 8,
-    padding: "8px 14px",
-    cursor: "pointer",
-    fontSize: 14,
-  },
-  smallPrimary: {
-    background: "#2563eb",
-    color: "#fff",
-    border: "1px solid #1d4ed8",
-    borderRadius: 8,
-    padding: "6px 10px",
-    cursor: "pointer",
-    fontSize: 13,
-  },
-  smallGhost: {
-    background: "#fff",
-    color: "#334155",
-    border: "1px solid #e2e8f0",
-    borderRadius: 8,
-    padding: "6px 10px",
-    cursor: "pointer",
-    fontSize: 13,
-  },
-  smallDanger: {
-    background: "#ef4444",
-    color: "#fff",
-    border: "1px solid #dc2626",
-    borderRadius: 8,
-    padding: "6px 10px",
-    cursor: "pointer",
-    fontSize: 13,
-  },
-  rolesGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-    gap: 10,
-    padding: "8px 0 12px",
-  },
-  roleItem: {
-    display: "flex",
-    alignItems: "center",
-    fontSize: 14,
-    color: "#334155",
-    padding: "6px 8px",
-    borderRadius: 8,
-    border: "1px solid #e2e8f0",
-    background: "#ffffff",
-  },
-  roleActions: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 8,
-  },
-};
-
-/** Modal styles */
-const m = {
-  backdrop: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(15, 23, 42, 0.35)", // slate-900 @ 35%
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-    zIndex: 1000,
-  },
-  panel: {
-    width: "min(720px, 100%)",
-    background: "#fff",
-    borderRadius: 12,
-    border: "1px solid #e5e7eb",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
-  },
-  header: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "12px 14px",
-    borderBottom: "1px solid #f1f5f9",
-  },
-  body: { padding: 16 },
-  iconBtn: {
-    border: "1px solid #e2e8f0",
-    background: "#fff",
-    borderRadius: 8,
-    padding: "4px 8px",
-    cursor: "pointer",
-  },
+const thStyle = {
+  textAlign: "left",
+  padding: 12,
+  fontSize: 12,
+  textTransform: "uppercase",
+  letterSpacing: 0.4,
+  color: "#6b7280",
 };
