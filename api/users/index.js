@@ -1,9 +1,8 @@
 // BEGIN FILE: api/users/index.js
 // VERSION: 2025-08-24
-// NOTES:
-// - Server-side pagination/sort/search scaffold.
-// - Uses MOCK data by default. To wire Cosmos DB, replace `fetchAllUsers()` implementation.
-// - Returns { rows, total }.
+// NOTES: Adds server-side RBAC using EasyAuth roles. 403 if not admin/manager.
+
+const { parseClientPrincipal, userHasAnyRole } = require("../shared/auth");
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
@@ -12,17 +11,22 @@ const ALLOWED_DIR = new Set(["asc", "desc"]);
 
 module.exports = async function (context, req) {
   try {
+    // ----- RBAC (live from SWA) -----
+    const principal = parseClientPrincipal(req);
+    if (!userHasAnyRole(principal, ["admin", "manager"])) {
+      context.res = { status: 403, body: { error: "Forbidden" } };
+      return;
+    }
+
+    // ----- Query params -----
     const page = clampInt(req.query.page, DEFAULT_PAGE, 1, 100000);
     const pageSize = clampInt(req.query.pageSize, DEFAULT_PAGE_SIZE, 1, 200);
     const search = (req.query.search || "").toString().trim().toLowerCase();
     const sortBy = ALLOWED_SORT.has(req.query.sortBy) ? req.query.sortBy : "createdAt";
     const sortDir = ALLOWED_DIR.has(req.query.sortDir) ? req.query.sortDir : "desc";
 
-    // TODO(Production): enforce role guards via EasyAuth claims if needed
-    // const clientPrincipal = req.headers["x-ms-client-principal"];
-    // Parse and check roles here if you need server-side enforcement.
-
-    const all = await fetchAllUsers(context); // Array of user objects
+    // ----- Data source (mock for now; wire Cosmos/Azure Mgmt later) -----
+    const all = await fetchAllUsers(context);
     let filtered = all;
 
     if (search) {
@@ -58,19 +62,16 @@ module.exports = async function (context, req) {
   }
 };
 
-// --- Helpers & Data ---
-
+// --- Helpers & Mock Data ---
 function clampInt(val, fallback, min, max) {
   const n = parseInt(val, 10);
   if (Number.isNaN(n)) return fallback;
   return Math.min(max, Math.max(min, n));
 }
 
-// Replace this with Cosmos DB logic in production
-async function fetchAllUsers(context) {
-  // MOCK data for initial wiring; add/remove fields to match your front-end columns
-  // In a real app, fetch from Cosmos and map to { id, name, email, role, createdAt }
-  const mock = [
+async function fetchAllUsers() {
+  // Same mock seed as before; replace with Cosmos or Azure Mgmt API later
+  return [
     { id: "u1", name: "Alice", email: "alice@example.com", role: "admin", createdAt: "2025-06-01" },
     { id: "u2", name: "Bob", email: "bob@example.com", role: "viewer", createdAt: "2025-06-02" },
     { id: "u3", name: "Cara", email: "cara@example.com", role: "manager", createdAt: "2025-06-03" },
@@ -83,33 +84,4 @@ async function fetchAllUsers(context) {
     { id: "u10", name: "Jack", email: "jack@example.com", role: "viewer", createdAt: "2025-06-10" },
     { id: "u11", name: "Kara", email: "kara@example.com", role: "viewer", createdAt: "2025-06-11" }
   ];
-  return mock;
 }
-
-/* --- Cosmos DB (Optional Production Example) ---
-const { CosmosClient } = require("@azure/cosmos");
-
-// env required:
-// COSMOS_ENDPOINT, COSMOS_KEY, COSMOS_DB, COSMOS_CONTAINER
-async function fetchAllUsers(context) {
-  const endpoint = process.env.COSMOS_ENDPOINT;
-  const key = process.env.COSMOS_KEY;
-  const databaseId = process.env.COSMOS_DB || "appdb";
-  const containerId = process.env.COSMOS_CONTAINER || "users";
-
-  if (!endpoint || !key) {
-    context.log.warn("COSMOS env vars missing; falling back to MOCK data.");
-    return await fetchAllUsersMock();
-  }
-
-  const client = new CosmosClient({ endpoint, key });
-  const container = client.database(databaseId).container(containerId);
-
-  // Adjust SELECT to your schema
-  const { resources } = await container.items
-    .query("SELECT c.id, c.name, c.email, c.role, c.createdAt FROM c")
-    .fetchAll();
-
-  return resources || [];
-}
---- end Cosmos example --- */

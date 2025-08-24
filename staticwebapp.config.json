@@ -9,6 +9,7 @@
     /* --- Admin UI (lock to admins only) --- */
     { "route": "/admin",   "allowedRoles": ["admin"] },
     { "route": "/admin/*", "allowedRoles": ["admin"] },
+    { "route": "/admin/users", "allowedRoles": ["admin", "manager"] },
 
     /* --- Admin-only user management API --- */
     { "route": "/api/manageUsers",      "allowedRoles": ["admin"] },
@@ -25,9 +26,7 @@
     */
   ],
   "responseOverrides": {
-    "401": {
-      "statusCode": 401,
-      "rewrite": "/index.html"
-    }
+    "401": { "rewrite": "/login" },
+    "403": { "rewrite": "/no-access" }
   }
 }

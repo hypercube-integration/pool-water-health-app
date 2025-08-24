@@ -1,15 +1,15 @@
 // BEGIN FILE: src/pages/ManageUsers.jsx
 // VERSION: 2025-08-24
-// NOTES: Corrected import paths for location at src/pages/ManageUsers.jsx
+// NOTES: Uses live roles from /.auth/me; server calls will 403 if not authorized.
 
 import React from "react";
 import { toCsv, downloadCsv } from "../utils/csv";
 import { hasAnyRole } from "../auth/roles";
 import { useUsers } from "../hooks/useUsers";
+import { useCurrentUser } from "../hooks/useCurrentUser";
 
 export default function ManageUsersPage() {
-  // TODO: wire currentUser from your auth provider/context
-  const currentUser = { roles: ["admin"] };
+  const { user, roles, loading: authLoading } = useCurrentUser();
 
   const {
     rows,
@@ -35,7 +35,25 @@ export default function ManageUsersPage() {
     { key: "createdAt", headerName: "Created" },
   ];
 
-  const canExport = hasAnyRole(currentUser, ["admin", "manager"]);
+  const canAdmin = hasAnyRole({ roles }, ["admin", "manager"]);
+
+  if (authLoading) {
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-semibold">Manage Users &amp; Roles</h1>
+        <div className="mt-4 text-gray-500">Checking your access…</div>
+      </div>
+    );
+  }
+
+  if (!canAdmin) {
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-semibold">Manage Users &amp; Roles</h1>
+        <p className="mt-4 text-red-600">You don’t have access to this page.</p>
+      </div>
+    );
+  }
 
   const handleExport = () => {
     const csv = toCsv(rows, columns);
@@ -47,15 +65,13 @@ export default function ManageUsersPage() {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">Manage Users &amp; Roles</h1>
 
-        {canExport && (
-          <button
-            onClick={handleExport}
-            className="px-3 py-2 rounded bg-gray-800 text-white hover:opacity-90"
-            aria-label="Export users to CSV"
-          >
-            Export CSV
-          </button>
-        )}
+        <button
+          onClick={handleExport}
+          className="px-3 py-2 rounded bg-gray-800 text-white hover:opacity-90"
+          aria-label="Export users to CSV"
+        >
+          Export CSV
+        </button>
 
         <div className="ml-auto flex items-center gap-2">
           <input
