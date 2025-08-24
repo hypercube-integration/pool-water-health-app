@@ -471,7 +471,7 @@ const styles = {
   smallPrimary: {
     background: "#2563eb",
     color: "#fff",
-    border: "1px solid "#1d4ed8"",
+    border: "1px solid #1d4ed8",
     borderRadius: 8,
     padding: "6px 10px",
     cursor: "pointer",
