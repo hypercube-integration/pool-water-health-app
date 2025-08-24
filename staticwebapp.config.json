@@ -7,8 +7,12 @@
     { "route": "/signed-out", "allowedRoles": ["anonymous"] },
 
     /* --- Admin UI (lock to admins only) --- */
-    { "route": "/admin",    "allowedRoles": ["admin"] },
-    { "route": "/admin/*",  "allowedRoles": ["admin"] },
+    { "route": "/admin",   "allowedRoles": ["admin"] },
+    { "route": "/admin/*", "allowedRoles": ["admin"] },
+
+    /* --- Admin-only user management API --- */
+    { "route": "/api/manageUsers",      "allowedRoles": ["admin"] },
+    { "route": "/api/manageUsers/*",    "allowedRoles": ["admin"] },
 
     /* --- API endpoints with role rules --- */
     { "route": "/api/submitReading", "allowedRoles": ["writer", "admin"] },
