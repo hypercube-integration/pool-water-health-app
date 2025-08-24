@@ -1,13 +1,13 @@
-// BEGIN FILE: src/pages/Admin/Users.jsx
+// BEGIN FILE: src/pages/ManageUsers.jsx
 // VERSION: 2025-08-24
-// NOTES: Users page wired to Azure Function with pagination/sort/search + CSV export and role guard.
+// NOTES: Corrected import paths for location at src/pages/ManageUsers.jsx
 
 import React from "react";
-import { toCsv, downloadCsv } from "../../utils/csv";
-import { hasAnyRole } from "../../auth/roles";
-import { useUsers } from "../../hooks/useUsers";
+import { toCsv, downloadCsv } from "../utils/csv";
+import { hasAnyRole } from "../auth/roles";
+import { useUsers } from "../hooks/useUsers";
 
-export default function UsersPage() {
+export default function ManageUsersPage() {
   // TODO: wire currentUser from your auth provider/context
   const currentUser = { roles: ["admin"] };
 
@@ -61,7 +61,6 @@ export default function UsersPage() {
           <input
             value={search}
             onChange={(e) => {
-              // Reset to page 1 on new search
               setSearch(e.target.value);
               setPage(1);
             }}
@@ -73,7 +72,6 @@ export default function UsersPage() {
             value={pageSize}
             onChange={(e) => {
               const next = Number(e.target.value) || 10;
-              // Reset to page 1 on page size change
               setPageSize(next);
               setPage(1);
             }}
@@ -99,10 +97,7 @@ export default function UsersPage() {
                   <th key={c.key} className="text-left font-medium px-3 py-2 border-b border-gray-200">
                     <button
                       className={`inline-flex items-center gap-1 ${active ? "text-gray-900" : "text-gray-700"} hover:underline`}
-                      onClick={() => {
-                        toggleSort(c.key);
-                        // stay on same page; server will reorder
-                      }}
+                      onClick={() => toggleSort(c.key)}
                     >
                       <span>{c.headerName}</span>
                       {active && <span aria-hidden="true">{sortDir === "asc" ? "▲" : "▼"}</span>}
