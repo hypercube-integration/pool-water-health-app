@@ -1,4 +1,4 @@
-// src/pages/Admin.jsx
+// src/pages/Manage.jsx
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -26,7 +26,7 @@ function useSwaUser() {
   return user;
 }
 
-export default function Admin() {
+export default function Manage() {
   const user = useSwaUser();
 
   // Invite form state
@@ -58,20 +58,19 @@ export default function Admin() {
   const chip = (txt, cls) => (<span className={`chip ${cls}`} key={txt}>{txt}</span>);
 
   return (
-    <div className="admin-wrap">
+    <div className="page-container">
       <style>{`
-        .admin-wrap { display:flex; flex-direction:column; gap:16px; }
-        .card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,0.03); }
+        .page-container { display:flex; flex-direction:column; gap:16px; padding:16px; }
+        .card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.05); }
         .row { display:flex; align-items:center; justify-content:space-between; }
-        .title { font-size:28px; font-weight:600; }
-        .subtle { color:#64748b; }
+        .title { font-size:24px; font-weight:600; color:#111827; }
+        .subtle { color:#6b7280; font-size:14px; }
         .chip { display:inline-flex; align-items:center; padding:2px 8px; font-size:12px; border-radius:999px; border:1px solid #e5e7eb; margin-right:6px; margin-bottom:6px; }
-        .btn { display:inline-block; padding:8px 14px; border:1px solid #e5e7eb; border-radius:10px; text-decoration:none; color:#111827; background:#fff; }
+        .btn { display:inline-block; padding:8px 14px; border:1px solid #e5e7eb; border-radius:8px; text-decoration:none; color:#111827; background:#fff; font-size:14px; }
         .btn:hover { background:#f9fafb; }
         .grid { display:grid; grid-template-columns:1fr; gap:12px; }
         @media(min-width: 700px){ .grid-3 { grid-template-columns: repeat(3, 1fr); } }
-        textarea, input { font: inherit; }
-        input, textarea { border:1px solid #e5e7eb; border-radius:8px; padding:8px 12px; }
+        textarea, input { font: inherit; border:1px solid #e5e7eb; border-radius:8px; padding:8px 12px; width:100%; }
         .muted { color:#6b7280; font-size:12px; }
         /* Color chips */
         .admin    { background:#ecfdf5; border-color:#a7f3d0; color:#065f46; }
@@ -80,12 +79,12 @@ export default function Admin() {
         .deleter  { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
         .exporter { background:#fffbeb; border-color:#fde68a; color:#92400e; }
         .anonymous, .authenticated { background:#f3f4f6; border-color:#e5e7eb; color:#374151; }
-        .h2 { font-size:18px; font-weight:600; margin-bottom:8px; }
+        .h2 { font-size:18px; font-weight:600; margin-bottom:8px; color:#111827; }
       `}</style>
 
       <div className="row">
         <Link to="/" className="subtle">← Back to dashboard</Link>
-        <div className="title">Admin</div>
+        <div className="title">Manage</div>
         <div />
       </div>
 
@@ -104,7 +103,7 @@ export default function Admin() {
       <div className="card">
         <div className="h2">Admin Actions</div>
         <div style={{display:"flex", gap:12, flexWrap:"wrap"}}>
-          <Link className="btn" to="/admin/users">Manage Users &amp; Roles</Link>
+          <Link className="btn" to="/manage/users">Manage Users &amp; Roles</Link>
           <a className="btn" target="_blank" rel="noreferrer"
              href="https://portal.azure.com/#view/HubsExtension/BrowseResource/resourceType/microsoft.web%2FstaticSites">
             Open Azure Portal (Static Web Apps)
