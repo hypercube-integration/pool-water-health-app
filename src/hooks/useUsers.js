@@ -1,9 +1,9 @@
 // BEGIN FILE: src/hooks/useUsers.js
 // VERSION: 2025-08-24
-// NOTES: Hook that manages users list + pagination/sort/search and loading/error state.
+// NOTES: Hook managing users list + pagination/sort/search and loading/error state.
 
 import { useEffect, useMemo, useState } from "react";
-import { getUsers } from "../services/usersService";
+import { getUsers } from "../services/usersService"; // <-- this path requires src/services/usersService.js
 
 export function useUsers(initial = {}) {
   const [page, setPage] = useState(initial.page ?? 1);
@@ -17,7 +17,10 @@ export function useUsers(initial = {}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const params = useMemo(() => ({ page, pageSize, search, sortBy, sortDir }), [page, pageSize, search, sortBy, sortDir]);
+  const params = useMemo(
+    () => ({ page, pageSize, search, sortBy, sortDir }),
+    [page, pageSize, search, sortBy, sortDir]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -39,7 +42,7 @@ export function useUsers(initial = {}) {
     return () => {
       cancelled = true;
     };
-  }, [params.page, params.pageSize, params.search, params.sortBy, params.sortDir]); // keep explicit for clarity
+  }, [params.page, params.pageSize, params.search, params.sortBy, params.sortDir]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 

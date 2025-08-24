@@ -2,7 +2,13 @@
 // VERSION: 2025-08-24
 // NOTES: Front-end service calling Azure Function `/api/users` with pagination/sort/search.
 
-export async function getUsers({ page = 1, pageSize = 10, search = "", sortBy = "createdAt", sortDir = "desc" } = {}) {
+export async function getUsers({
+  page = 1,
+  pageSize = 10,
+  search = "",
+  sortBy = "createdAt",
+  sortDir = "desc",
+} = {}) {
   const params = new URLSearchParams({
     page: String(page),
     pageSize: String(pageSize),
