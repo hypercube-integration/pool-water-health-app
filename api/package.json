@@ -1,5 +1,6 @@
 {
-  "name": "api",
+  "name": "pool-app-api",
+  "private": true,
   "version": "1.0.0",
   "main": "index.js",
   "engines": {
@@ -11,6 +12,8 @@
     "node-fetch": "^2.7.0"
   },
   "devDependencies": {
+    "@azure/arm-appservice": "^15.0.0",
+    "@azure/identity": "^4.2.0",
     "azure-functions-core-tools": "^4.1.0"
   }
 }
