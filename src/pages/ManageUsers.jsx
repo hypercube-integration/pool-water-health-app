@@ -1,6 +1,8 @@
 // BEGIN FILE: src/pages/ManageUsers.jsx
-// VERSION: 2025-08-24
-// NOTES: Uses live roles from /.auth/me; server calls will 403 if not authorized.
+// VERSION: 2025-08-25
+// NOTES:
+// - Shows Provider and ALL Roles
+// - Defaults sorting to name/asc (Mgmt API has no createdAt)
 
 import React from "react";
 import { toCsv, downloadCsv } from "../utils/csv";
@@ -9,7 +11,7 @@ import { useUsers } from "../hooks/useUsers";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 
 export default function ManageUsersPage() {
-  const { user, roles, loading: authLoading } = useCurrentUser();
+  const { roles, loading: authLoading } = useCurrentUser();
 
   const {
     rows,
@@ -26,13 +28,18 @@ export default function ManageUsersPage() {
     setPageSize,
     setSearch,
     toggleSort,
-  } = useUsers({ page: 1, pageSize: 10, sortBy: "createdAt", sortDir: "desc" });
+  } = useUsers({ page: 1, pageSize: 10, sortBy: "name", sortDir: "asc" });
 
-  const columns = [
+  const cols = [
     { key: "name", headerName: "Name" },
-    { key: "email", headerName: "Email" },
-    { key: "role", headerName: "Role" },
-    { key: "createdAt", headerName: "Created" },
+    { key: "email", headerName: "Email", selector: (r) => r.email || "" },
+    { key: "provider", headerName: "Provider" },
+    {
+      key: "roles",
+      headerName: "Roles",
+      selector: (r) => (Array.isArray(r.roles) ? r.roles.join(", ") : r.role || "")
+    }
+    // { key: "createdAt", headerName: "Created" } // not provided by Mgmt API
   ];
 
   const canAdmin = hasAnyRole({ roles }, ["admin", "manager"]);
@@ -56,7 +63,7 @@ export default function ManageUsersPage() {
   }
 
   const handleExport = () => {
-    const csv = toCsv(rows, columns);
+    const csv = toCsv(rows, cols);
     downloadCsv(csv, "users");
   };
 
@@ -107,7 +114,7 @@ export default function ManageUsersPage() {
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50 text-gray-700">
             <tr>
-              {columns.map((c) => {
+              {cols.map((c) => {
                 const active = sortBy === c.key;
                 return (
                   <th key={c.key} className="text-left font-medium px-3 py-2 border-b border-gray-200">
@@ -126,21 +133,21 @@ export default function ManageUsersPage() {
           <tbody className="bg-white text-gray-900">
             {loading && (
               <tr>
-                <td colSpan={columns.length} className="px-3 py-6 text-center text-gray-500">
+                <td colSpan={cols.length} className="px-3 py-6 text-center text-gray-500">
                   Loading…
                 </td>
               </tr>
             )}
             {!loading && error && (
               <tr>
-                <td colSpan={columns.length} className="px-3 py-6 text-center text-red-600">
+                <td colSpan={cols.length} className="px-3 py-6 text-center text-red-600">
                   {error}
                 </td>
               </tr>
             )}
             {!loading && !error && rows.length === 0 && (
               <tr>
-                <td colSpan={columns.length} className="px-3 py-6 text-center text-gray-500">
+                <td colSpan={cols.length} className="px-3 py-6 text-center text-gray-500">
                   No users found
                 </td>
               </tr>
@@ -148,10 +155,10 @@ export default function ManageUsersPage() {
             {!loading &&
               !error &&
               rows.map((u) => (
-                <tr key={u.id} className="hover:bg-gray-50">
-                  {columns.map((c) => (
+                <tr key={`${u.provider}|${u.id}`} className="hover:bg-gray-50">
+                  {cols.map((c) => (
                     <td key={c.key} className="px-3 py-2 border-b border-gray-100">
-                      {u[c.key]}
+                      {typeof c.selector === "function" ? c.selector(u) : u[c.key] || ""}
                     </td>
                   ))}
                 </tr>
