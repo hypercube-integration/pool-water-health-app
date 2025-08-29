@@ -1,18 +1,6 @@
 {
   "bindings": [
-    {
-      "authLevel": "anonymous",
-      "type": "httpTrigger",
-      "direction": "in",
-      "name": "req",
-      "methods": [ "delete", "post" ],
-      "route": "manageUsers/delete"
-    },
-    {
-      "type": "http",
-      "direction": "out",
-      "name": "res"
-    }
-  ],
-  "scriptFile": "index.js"
+    { "authLevel": "anonymous", "type": "httpTrigger", "direction": "in", "name": "req", "methods": ["post"], "route": "users/delete" },
+    { "type": "http", "direction": "out", "name": "res" }
+  ]
 }

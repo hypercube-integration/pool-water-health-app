@@ -1,14 +1,6 @@
 {
   "bindings": [
-    {
-      "authLevel": "anonymous",
-      "type": "httpTrigger",
-      "direction": "in",
-      "name": "req",
-      "methods": [ "post" ],
-      "route": "manageUsers/invite"
-    },
+    { "authLevel": "anonymous", "type": "httpTrigger", "direction": "in", "name": "req", "methods": ["post"], "route": "users/invite" },
     { "type": "http", "direction": "out", "name": "res" }
-  ],
-  "scriptFile": "index.js"
+  ]
 }

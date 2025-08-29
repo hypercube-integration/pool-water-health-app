@@ -1,73 +1,61 @@
-// Creates a roles invitation link for a user (works with aad/github).
-// POST .../staticSites/{name}/authproviders/{provider}/users/{userid}/rolesInvitation?api-version=2024-11-01
-// Docs: Static Sites - Create User Roles Invitation Link
-const { DefaultAzureCredential, getBearerTokenProvider } = require("@azure/identity");
+// VERSION: 2025-08-25
+// ACTION: Create an invitation link (admin/manager)
+// POST /api/users/invite  BODY: { provider: "aad"|"github", userDetails: "<email|upn|username>", roles: ["viewer"], hours?: 24, domain?: "<host>" }
 
-const ARM_SCOPE = "https://management.azure.com/.default";
-const API_VERSION = "2024-11-01";
-
-function resourceIdFromEnv() {
-  if (process.env.SWA_RESOURCE_ID) return process.env.SWA_RESOURCE_ID;
-  const sub = process.env.SWA_SUBSCRIPTION_ID;
-  const rg = process.env.SWA_RESOURCE_GROUP;
-  const name = process.env.SWA_NAME;
-  if (!sub || !rg || !name) throw new Error("Missing SWA_RESOURCE_ID or SWA_SUBSCRIPTION_ID/SWA_RESOURCE_GROUP/SWA_NAME");
-  return `/subscriptions/${sub}/resourceGroups/${rg}/providers/Microsoft.Web/staticSites/${name}`;
-}
-
-async function armFetch(path, options = {}) {
-  const credential = new DefaultAzureCredential();
-  const tokenProvider = getBearerTokenProvider(credential, ARM_SCOPE);
-  const token = await tokenProvider();
-  const headers = {
-    "Authorization": `Bearer ${token.token}`,
-    "Content-Type": "application/json",
-    ...(options.headers || {})
-  };
-  const res = await fetch(`https://management.azure.com${path}`, { ...options, headers });
-  const text = await res.text();
-  let body; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
-  return { status: res.status, body, headers: Object.fromEntries(res.headers.entries()) };
-}
+const { DefaultAzureCredential } = require("@azure/identity");
+const { WebSiteManagementClient } = require("@azure/arm-appservice");
 
 module.exports = async function (context, req) {
   try {
-    const {
-      provider,                 // "aad" | "github"
-      userId,                   // arbitrary ID for invitee (string you pick, e.g. email hash)
-      roles,                    // "admin,writer" or [ "admin", "writer" ]
-      email,                    // invitee's email (shown on the invite UI)
-      expirationHours = 48,     // optional, default 48h
-      domain                    // optional; if provided, invite UI will show it
-    } = req.body || {};
-
-    if (!provider || !userId || !roles || !email) {
-      context.res = { status: 400, body: { error: "provider, userId, roles, email are required" } };
-      return;
+    const cp = parseCP(req);
+    if (!hasAnyRole(cp, ["admin", "manager"])) {
+      return (context.res = json(403, { error: "Forbidden" }));
     }
 
-    const resourceId = resourceIdFromEnv();
-    const path = `${resourceId}/authproviders/${encodeURIComponent(provider)}/users/${encodeURIComponent(userId)}/rolesInvitation?api-version=${API_VERSION}`;
+    const { provider, userDetails, roles, hours, domain } = req.body || {};
+    if (!provider || !userDetails || !Array.isArray(roles)) {
+      return (context.res = json(400, { error: "BadRequest", message: "provider, userDetails, roles[] are required" }));
+    }
 
-    const rolesString = Array.isArray(roles) ? roles.join(",") : roles;
+    const subId = mustEnv("APPSERVICE_SUBSCRIPTION_ID");
+    const rg = mustEnv("APPSERVICE_RESOURCE_GROUP");
+    const site = mustEnv("APPSERVICE_STATIC_SITE_NAME");
+
+    const credential = new DefaultAzureCredential();
+    const client = new WebSiteManagementClient(credential, subId);
+
+    const rolesCsv = roles.map(String).map((r) => r.trim()).filter(Boolean).join(",");
+    const fallbackDomain =
+      process.env.SWA_PUBLIC_HOST ||
+      req.headers["x-forwarded-host"] ||
+      req.headers.host ||
+      "";
+
     const payload = {
       properties: {
-        roles: rolesString,
-        numHoursToExpiration: Number(expirationHours) || 48,
-        invitationDomain: domain || undefined,
-        userDetails: email
+        domain: (domain || fallbackDomain || "").toString(),
+        provider,
+        userDetails,
+        roles: rolesCsv,
+        numHoursToExpiration: Number.isFinite(hours) ? Number(hours) : 24
       }
     };
 
-    const rsp = await armFetch(path, { method: "POST", body: JSON.stringify(payload) });
+    const res = await client.staticSites.createUserRolesInvitationLink(rg, site, payload);
 
-    if (rsp.status >= 200 && rsp.status < 300) {
-      // ARM returns an object whose properties include the invitation URL
-      context.res = { status: 200, body: rsp.body };
-    } else {
-      context.res = { status: rsp.status, body: { error: "Invite failed", debug: rsp } };
-    }
+    return (context.res = json(200, {
+      ok: true,
+      invitationUrl: res?.properties?.invitationUrl || "",
+      expiresOn: res?.properties?.expiresOn || ""
+    }));
   } catch (err) {
-    context.res = { status: 500, body: { error: err.message || String(err) } };
+    context.log.error("manageUsersInvite error:", err?.message || err);
+    return (context.res = json(500, { error: "ServerError", message: err?.message || "Failed to create invitation" }));
   }
 };
+
+// helpers
+function json(status, body) { return { status, headers: { "content-type": "application/json" }, body }; }
+function mustEnv(n) { const v = process.env[n]; if (!v) throw new Error(`Missing env: ${n}`); return v; }
+function parseCP(req){ try{ const h=req.headers["x-ms-client-principal"]; if(!h) return null; const d=Buffer.from(h,"base64").toString("utf8"); const cp=JSON.parse(d); cp.userRoles=(cp.userRoles||[]).filter(r=>r!=="anonymous"); return cp; }catch{return null;} }
+function hasAnyRole(cp, allowed){ if(!cp) return false; const set=new Set((cp.userRoles||[]).map(String)); return allowed.some(r=>set.has(String(r))); }

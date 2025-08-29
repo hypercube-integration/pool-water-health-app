@@ -1,69 +1,58 @@
-const fetch = require("node-fetch");
-const { DefaultAzureCredential, getBearerTokenProvider } = require("@azure/identity");
+// VERSION: 2025-08-25
+// ACTION: Create/update a SWA user entry with chosen roles (RBAC: admin/manager)
+// POST /api/users/update  BODY: { provider: "aad"|"github"|"twitter", userId: "<id>", roles: ["admin"], displayName?: "..." }
 
-const ARM_SCOPE = "https://management.azure.com/.default";
+const { DefaultAzureCredential } = require("@azure/identity");
+const { WebSiteManagementClient } = require("@azure/arm-appservice");
 
 module.exports = async function (context, req) {
   try {
-    const { provider, userId, roles } = req.body || {};
-    if (!userId || !roles) {
-      return (context.res = { status: 400, jsonBody: { error: "userId and roles are required" } });
+    const cp = parseCP(req);
+    if (!hasAnyRole(cp, ["admin", "manager"])) {
+      return (context.res = json(403, { error: "Forbidden" }));
     }
 
-    // Try to infer provider if missing by listing users once and matching userId
-    let providerFinal = provider;
-    if (!providerFinal) {
-      const resList = await callArm("GET", process.env.SWA_RESOURCE_ID + "/authproviders?api-version=2024-11-01");
-      if (!resList.ok) {
-        const body = await resList.text();
-        return (context.res = { status: 400, jsonBody: { error: "Unable to infer provider", detail: body } });
+    const { provider, userId, roles, displayName } = req.body || {};
+    if (!provider || !userId || !Array.isArray(roles)) {
+      return (context.res = json(400, { error: "BadRequest", message: "provider, userId, roles[] are required" }));
+    }
+
+    const subId = mustEnv("APPSERVICE_SUBSCRIPTION_ID");
+    const rg = mustEnv("APPSERVICE_RESOURCE_GROUP");
+    const site = mustEnv("APPSERVICE_STATIC_SITE_NAME");
+
+    const rolesCsv = roles.map(String).map((r) => r.trim()).filter(Boolean).join(",");
+
+    const credential = new DefaultAzureCredential();
+    const client = new WebSiteManagementClient(credential, subId);
+
+    const payload = {
+      properties: {
+        provider,
+        userId,
+        roles: rolesCsv,
+        ...(displayName ? { displayName } : {})
       }
-      const { value: provs = [] } = await resList.json();
-      for (const p of provs) {
-        const pName = p?.name; // github | aad | etc
-        if (!pName) continue;
-        const url = `${process.env.SWA_RESOURCE_ID}/authproviders/${pName}/users/${userId}?api-version=2024-11-01`;
-        const probe = await callArm("GET", url);
-        if (probe.status === 200) {
-          providerFinal = pName;
-          break;
-        }
-      }
-    }
+    };
 
-    if (!providerFinal) {
-      return (context.res = { status: 400, jsonBody: { error: "provider, userId and roles are required" } });
-    }
+    const result = await client.staticSites.updateStaticSiteUser(rg, site, provider, userId, payload);
 
-    const url = `${process.env.SWA_RESOURCE_ID}/authproviders/${providerFinal}/users/${userId}?api-version=2024-11-01`;
-    const body = { properties: { roles } };
-
-    const res = await callArm("PUT", url, body);
-    const txt = await res.text();
-    if (!res.ok) {
-      return (context.res = { status: res.status, jsonBody: { error: "Update failed", detail: safeJson(txt) } });
-    }
-    return (context.res = { status: 200, body: txt || "{}" });
+    return (context.res = json(200, { ok: true, user: normalizeUser(result) }));
   } catch (err) {
-    context.log.error(err);
-    context.res = { status: 500, jsonBody: { error: "Unexpected error", detail: String(err) } };
+    context.log.error("manageUsersUpdate error:", err?.message || err);
+    return (context.res = json(500, { error: "ServerError", message: err?.message || "Failed to update roles" }));
   }
 };
 
-function safeJson(t) {
-  try { return JSON.parse(t); } catch { return t; }
-}
-
-async function callArm(method, url, body) {
-  const credential = new DefaultAzureCredential();
-  const getToken = getBearerTokenProvider(credential, ARM_SCOPE);
-  const token = (await getToken()).token;
-  return fetch(`https://management.azure.com${url.replace(/^https?:\/\/management\.azure\.com/, "")}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+// helpers
+function json(status, body) { return { status, headers: { "content-type": "application/json" }, body }; }
+function mustEnv(n) { const v = process.env[n]; if (!v) throw new Error(`Missing env: ${n}`); return v; }
+function parseCP(req){ try{ const h=req.headers["x-ms-client-principal"]; if(!h) return null; const d=Buffer.from(h,"base64").toString("utf8"); const cp=JSON.parse(d); cp.userRoles=(cp.userRoles||[]).filter(r=>r!=="anonymous"); return cp; }catch{return null;} }
+function hasAnyRole(cp, allowed){ if(!cp) return false; const set=new Set((cp.userRoles||[]).map(String)); return allowed.some(r=>set.has(String(r))); }
+function normalizeUser(u) {
+  const p = u?.properties || {};
+  const display = (p.displayName || "").trim();
+  const email = /@/.test(display) ? display : "";
+  const roles = (p.roles || "").split(",").map((r) => r.trim()).filter(Boolean);
+  return { id: p.userId || u.id || "", name: display || p.userId || "(unknown)", email, provider: p.provider || "", roles };
 }

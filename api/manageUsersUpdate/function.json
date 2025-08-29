@@ -1,18 +1,6 @@
 {
   "bindings": [
-    {
-      "authLevel": "anonymous",
-      "type": "httpTrigger",
-      "direction": "in",
-      "name": "req",
-      "methods": [ "patch", "post" ],
-      "route": "manageUsers/update"
-    },
-    {
-      "type": "http",
-      "direction": "out",
-      "name": "res"
-    }
-  ],
-  "scriptFile": "index.js"
+    { "authLevel": "anonymous", "type": "httpTrigger", "direction": "in", "name": "req", "methods": ["post"], "route": "users/update" },
+    { "type": "http", "direction": "out", "name": "res" }
+  ]
 }
