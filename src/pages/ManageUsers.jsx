@@ -1,7 +1,5 @@
 // BEGIN FILE: src/pages/ManageUsers.jsx
-// VERSION: 2025-08-30
-// Adds a "Set name" action that writes SWA displayName via /api/users/update.
-
+// VERSION: 2025-08-30 (Cosmos profiles)
 import React, { useMemo, useState } from "react";
 import { toCsv, downloadCsv } from "../utils/csv";
 import { hasAnyRole } from "../auth/roles";
@@ -67,14 +65,11 @@ export default function ManageUsersPage() {
     await fetch("/api/users/delete", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), credentials: "include" });
     reload();
   }
-  async function setDisplayName(user) {
-    const current = user.name && user.name !== user.id ? user.name : "";
-    const name = prompt("Enter display name to show for this user:", current);
-    if (!name) return;
-    // Keep their current roles; if none, leave empty array (they'll still be 'authenticated' implicitly).
-    const rolesArr = Array.isArray(user.roles) ? user.roles.filter(r => r !== "authenticated") : [];
-    const body = { provider: user.provider, userId: user.id, roles: rolesArr, displayName: name.trim() };
-    const res = await fetch("/api/users/update", {
+  async function setProfile(user) {
+    const name = prompt("Display name:", (user.name && user.name !== user.id) ? user.name : "") || "";
+    const email = prompt("Email (optional):", user.email || "") || "";
+    const body = { provider: user.provider, userId: user.id, name: name.trim(), email: email.trim() };
+    const res = await fetch("/api/profiles/upsert", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
@@ -82,7 +77,7 @@ export default function ManageUsersPage() {
     });
     if (!res.ok) {
       const t = await res.text();
-      alert(`Failed to set name: ${t || res.status}`);
+      alert(`Failed to save profile: ${t || res.status}`);
     }
     reload();
   }
@@ -164,8 +159,8 @@ export default function ManageUsersPage() {
                 </td>
                 <td className="px-3 py-2 border-b border-gray-100">
                   <div className="flex flex-wrap gap-2">
-                    <button className="px-2 py-1 text-xs rounded border hover:bg-gray-50" onClick={() => setDisplayName(u)}>
-                      Set name
+                    <button className="px-2 py-1 text-xs rounded border hover:bg-gray-50" onClick={() => setProfile(u)}>
+                      Set name/email
                     </button>
                     {ROLE_OPTIONS.map((r) => (
                       <button key={r} className="px-2 py-1 text-xs rounded border hover:bg-gray-50" onClick={() => setRole(u, r)}>

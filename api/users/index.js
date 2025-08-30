@@ -1,10 +1,11 @@
 // BEGIN FILE: api/users/index.js
-// VERSION: 2025-08-29 (with Graph debug)
-// Lists SWA users via ARM, enriches AAD users via Microsoft Graph.
-// Adds meta.graphLast to response when ?debug=1.
+// VERSION: 2025-08-30
+// Lists SWA users via ARM, enriches AAD via Graph (when possible),
+// and merges custom profiles (name/email) from Cosmos DB.
 
 const { DefaultAzureCredential } = require("@azure/identity");
 const { WebSiteManagementClient } = require("@azure/arm-appservice");
+const { CosmosClient } = require("@azure/cosmos");
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
@@ -34,6 +35,7 @@ module.exports = async function (context, req) {
     const credential = new DefaultAzureCredential();
     const client = new WebSiteManagementClient(credential, subId);
 
+    // --- Pull users from providers ---
     const map = new Map(); // key: provider|id
     for (const provider of PROVIDERS) {
       try {
@@ -50,7 +52,8 @@ module.exports = async function (context, req) {
       }
     }
 
-    const meta = { graphAttempted: 0, graphSucceeded: 0, graphLast: null };
+    // --- Optional: Graph enrichment for AAD objectIds (best-effort) ---
+    const meta = { graphAttempted: 0, graphSucceeded: 0, graphLast: null, cosmosEnabled: false, cosmosTried: 0, cosmosHits: 0 };
     if (ENRICH_AAD && map.size > 0) {
       try {
         await enrichAadUsers(context, credential, map, meta);
@@ -60,7 +63,20 @@ module.exports = async function (context, req) {
       }
     }
 
+    // --- Cosmos profiles (name/email) merge ---
+    const cosmosCfg = getCosmosConfig();
+    if (cosmosCfg.enabled) {
+      meta.cosmosEnabled = true;
+      try {
+        await mergeCosmosProfiles(context, cosmosCfg, map, meta);
+      } catch (e) {
+        context.log("Cosmos merge error:", e?.message || e);
+      }
+    }
+
+    // --- turn into array, then filter/sort/page ---
     const all = Array.from(map.values());
+
     let filtered = all;
     if (search) {
       filtered = all.filter((r) =>
@@ -68,6 +84,7 @@ module.exports = async function (context, req) {
           .some((v) => String(v || "").toLowerCase().includes(search))
       );
     }
+
     filtered.sort((a, b) => {
       const av = a[sortBy] ?? "";
       const bv = b[sortBy] ?? "";
@@ -154,6 +171,7 @@ function addUser(map, u, providerHint) {
   if (prefer) map.set(key, rec);
 }
 
+// ---------- Graph enrichment (best-effort for AAD) ----------
 async function enrichAadUsers(context, credential, map, meta) {
   const entries = Array.from(map.entries()).filter(([k, v]) => v.provider === "aad");
   if (entries.length === 0) return;
@@ -196,7 +214,7 @@ async function enrichAadUsers(context, credential, map, meta) {
       if (email && !rec.email) updated.email = email;
       map.set(key, updated);
     } else {
-      meta.graphLast = last; // e.g., { status: 403, message: "...Insufficient privileges..." }
+      meta.graphLast = last; // e.g., 404 when SWA ID != Graph objectId
     }
   }
 }
@@ -204,3 +222,46 @@ async function enrichAadUsers(context, credential, map, meta) {
 async function safeText(resp) { try { return await resp.text(); } catch { return ""; } }
 function looksLike32Hex(s) { return /^[0-9a-f]{32}$/i.test(String(s)); }
 function hyphenateGuid(h) { const x=String(h); return `${x.slice(0,8)}-${x.slice(8,12)}-${x.slice(12,16)}-${x.slice(16,20)}-${x.slice(20)}`; }
+
+// ---------- Cosmos merge ----------
+function getCosmosConfig() {
+  const cs = process.env.COSMOS_CONNECTION_STRING || "";
+  const db = process.env.COSMOS_DB || "";
+  const c  = process.env.COSMOS_DB_PROFILES_CONTAINER || "";
+  if (!cs || !db || !c) return { enabled: false };
+  return { enabled: true, conn: cs, db, container: c };
+}
+
+async function mergeCosmosProfiles(context, cfg, map, meta) {
+  const client = new CosmosClient(cfg.conn);
+  const container = client.database(cfg.db).container(cfg.container);
+
+  // Point-read each profile by id/pk = `${provider}:${id}`
+  const entries = Array.from(map.entries());
+  meta.cosmosTried = entries.length;
+
+  // Limit concurrency a bit
+  const pool = 8;
+  let i = 0;
+  async function worker() {
+    while (i < entries.length) {
+      const idx = i++;
+      const [key, rec] = entries[idx];
+      const pk = `${rec.provider}:${rec.id}`;
+      try {
+        const { resource } = await container.item(pk, pk).read();
+        if (resource) {
+          meta.cosmosHits++;
+          const updated = { ...rec };
+          if (resource.name)  updated.name  = resource.name;
+          if (resource.email) updated.email = resource.email;
+          map.set(key, updated);
+        }
+      } catch (e) {
+        // 404 is expected for missing docs; ignore others
+        if (e.code && e.code !== 404) context.log("Cosmos read error", pk, e.code, e.message);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(pool, entries.length) }, worker));
+}
