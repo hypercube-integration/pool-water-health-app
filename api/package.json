@@ -5,7 +5,7 @@
   "license": "MIT",
   "dependencies": {
     "@azure/arm-appservice": "^15.0.0",
-    "@azure/identity": "^4.2.0",
-    "@azure/cosmos": "^3.17.0"
+    "@azure/cosmos": "^3.17.0",
+    "@azure/identity": "^4.2.0"
   }
 }
