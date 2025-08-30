@@ -1,12 +1,9 @@
 // BEGIN FILE: api/users/index.js
-// VERSION: 2025-08-25
+// VERSION: 2025-08-29
 // NOTES:
-// - Lists SWA users via Azure Management API.
-// - Parses provider + providerUserId from the resourceId when properties are sparse.
-// - Optional AAD enrichment (displayName, mail, UPN) via Microsoft Graph using DefaultAzureCredential.
-//   • Toggle with env GRAPH_ENRICH_AAD=true|false (default true)
-//   • Requires Graph App permission: "User.Read.All" (application) with Admin consent on the identity used.
-// - RBAC: only 'admin' or 'manager' may call this API (EasyAuth roles).
+// - Lists SWA users via ARM, enriches AAD users via Microsoft Graph.
+// - Handles AAD ids that are 32-hex without hyphens by hyphenating to GUID.
+// - Add ?debug=1 to response to include enrichment stats.
 
 const { DefaultAzureCredential } = require("@azure/identity");
 const { WebSiteManagementClient } = require("@azure/arm-appservice");
@@ -16,7 +13,6 @@ const DEFAULT_PAGE_SIZE = 10;
 const ALLOWED_SORT = new Set(["name", "email", "role", "provider", "createdAt"]);
 const ALLOWED_DIR = new Set(["asc", "desc"]);
 const PROVIDERS = ["aad", "github", "twitter"];
-
 const ENRICH_AAD = String(process.env.GRAPH_ENRICH_AAD || "true").toLowerCase() === "true";
 
 module.exports = async function (context, req) {
@@ -33,6 +29,7 @@ module.exports = async function (context, req) {
     const search = (req.query.search || "").toString().trim().toLowerCase();
     const sortBy = ALLOWED_SORT.has(req.query.sortBy) ? req.query.sortBy : "name";
     const sortDir = ALLOWED_DIR.has(req.query.sortDir) ? req.query.sortDir : "asc";
+    const debug = req.query.debug === "1";
 
     // ---- Env ----
     const subId = mustEnv("APPSERVICE_SUBSCRIPTION_ID");
@@ -42,30 +39,31 @@ module.exports = async function (context, req) {
     const credential = new DefaultAzureCredential();
     const client = new WebSiteManagementClient(credential, subId);
 
-    // ---- Gather users from each provider (richer in some cases) ----
+    // ---- Gather users from providers ----
     const map = new Map(); // key: provider|id
     for (const provider of PROVIDERS) {
       try {
         for await (const u of client.staticSites.listStaticSiteUsers(rg, site, provider)) {
-          addUser(context, map, u, provider);
+          addUser(map, u, provider);
         }
       } catch (e) {
         context.log(`Provider ${provider} query skipped:`, e?.message || e);
       }
     }
     if (map.size === 0) {
+      // fallback 'all'
       for await (const u of client.staticSites.listStaticSiteUsers(rg, site, "all")) {
-        addUser(context, map, u, "all");
+        addUser(map, u, "all");
       }
     }
 
-    // ---- Optional: Enrich AAD users from Microsoft Graph (displayName, mail/UPN) ----
-    if (ENRICH_AAD) {
+    // ---- Optional AAD enrichment via Graph ----
+    const meta = { graphAttempted: 0, graphSucceeded: 0 };
+    if (ENRICH_AAD && map.size > 0) {
       try {
-        await enrichAadUsersFromGraph(context, credential, map);
+        await enrichAadUsers(context, credential, map, meta);
       } catch (e) {
-        // Never fail the API if Graph enrichment is unavailable
-        context.log("Graph enrichment skipped:", e?.message || e);
+        context.log("Graph enrichment error:", e?.message || e);
       }
     }
 
@@ -90,7 +88,7 @@ module.exports = async function (context, req) {
     const start = (page - 1) * pageSize;
     const rows = filtered.slice(start, start + pageSize);
 
-    return (context.res = json(200, { rows, total }));
+    return (context.res = json(200, debug ? { rows, total, meta } : { rows, total }));
   } catch (err) {
     context.log.error("users function error:", err?.message || err);
     return (context.res = json(500, { error: "ServerError" }));
@@ -134,10 +132,10 @@ function deriveFromId(resourceId) {
   const m = String(resourceId).match(/authproviders\/([^/]+)\/users\/([^/]+)/i);
   return m ? { provider: m[1], providerUserId: m[2] } : { provider: "", providerUserId: "" };
 }
-function addUser(context, map, u, providerHint) {
+function addUser(map, u, providerHint) {
   const p = u?.properties || {};
   const { provider: provFromId, providerUserId } = deriveFromId(u?.id);
-  const provider = p.provider || (providerHint !== "all" ? providerHint : provFromId) || "";
+  const provider = (p.provider || (providerHint !== "all" ? providerHint : provFromId) || "").toLowerCase();
 
   const display = (p.displayName || "").trim();
   const email = /@/.test(display) ? display : "";
@@ -156,7 +154,7 @@ function addUser(context, map, u, providerHint) {
     role: primary,
     roles: normalizedRoles.filter((r) => r !== "anonymous"),
     provider,
-    createdAt: "" // Mgmt API doesn't provide this
+    createdAt: "" // not provided by Mgmt API
   };
 
   const key = `${rec.provider}|${rec.id}`;
@@ -169,95 +167,61 @@ function addUser(context, map, u, providerHint) {
   if (prefer) map.set(key, rec);
 }
 
-// ---------------- Graph enrichment ----------------
+async function enrichAadUsers(context, credential, map, meta) {
+  // pull AAD users
+  const entries = Array.from(map.entries()).filter(([k, v]) => v.provider === "aad");
+  if (entries.length === 0) return;
 
-async function enrichAadUsersFromGraph(context, credential, map) {
-  // Collect unique AAD IDs (these need to be valid AAD object IDs to resolve)
-  const aadKeys = Array.from(map.entries())
-    .filter(([k, v]) => v.provider.toLowerCase() === "aad" && v.id && typeof v.id === "string")
-    .map(([k, v]) => v.id);
-
-  if (aadKeys.length === 0) return;
-
-  // Get a token for Microsoft Graph
+  // acquire Graph token
   const tokenObj = await credential.getToken("https://graph.microsoft.com/.default");
   const accessToken = tokenObj?.token;
   if (!accessToken) throw new Error("Unable to acquire Graph access token");
 
-  // Graph batch supports up to 20 requests per batch
-  const chunks = chunk(aadKeys, 20);
-  for (const ids of chunks) {
-    const batchBody = {
-      requests: ids.map((id, i) => ({
-        id: String(i + 1),
-        method: "GET",
-        url: `/users/${encodeURIComponent(id)}?$select=displayName,mail,userPrincipalName`,
-        headers: { Accept: "application/json" }
-      }))
-    };
+  for (const [key, rec] of entries) {
+    const rawId = String(rec.id || "");
+    // Try hyphenated GUID if raw is 32-hex
+    const hyphenated = looksLike32Hex(rawId) ? hyphenateGuid(rawId) : rawId;
 
-    const resp = await fetch("https://graph.microsoft.com/v1.0/$batch", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(batchBody)
-    });
+    meta.graphAttempted++;
 
-    if (!resp.ok) {
-      const t = await safeText(resp);
-      context.log(`Graph batch failed: ${resp.status} ${resp.statusText} ${t}`);
-      continue; // don’t fail enrichment
-    }
+    // First try hyphenated (if changed), else raw
+    const candidates = hyphenated && hyphenated !== rawId ? [hyphenated, rawId] : [rawId];
 
-    const data = await resp.json().catch(() => ({}));
-    const results = Array.isArray(data?.responses) ? data.responses : [];
-    for (const r of results) {
-      const body = r?.body || {};
-      const objId = extractUserIdFromUrl(r?.url);
-      // Find matching rec (provider 'aad' and id == objId)
-      const key = findAadKeyById(map, objId);
-      if (!key) continue;
-
-      const rec = map.get(key);
-      const displayName = body.displayName || "";
-      const email = body.mail || body.userPrincipalName || "";
-
-      if (displayName && (rec.name === "(unknown)" || looksLikeGuid(rec.name))) {
-        rec.name = displayName;
+    let got = null;
+    for (const cand of candidates) {
+      const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(cand)}?$select=displayName,mail,userPrincipalName`;
+      const resp = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" }
+      });
+      if (resp.ok) {
+        got = await resp.json();
+        break;
       }
-      if (email && !rec.email) rec.email = email;
+      // 404/400 → try next candidate
+    }
 
-      map.set(key, rec);
+    if (got) {
+      meta.graphSucceeded++;
+      const displayName = got.displayName || "";
+      const email = got.mail || got.userPrincipalName || "";
+
+      const updated = { ...rec };
+      if (displayName && (rec.name === "(unknown)" || looksLike32Hex(rec.name))) {
+        updated.name = displayName;
+      }
+      if (email && !rec.email) {
+        updated.email = email;
+      }
+      map.set(key, updated);
     }
   }
 }
 
-function chunk(arr, size) {
-  const out = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
+function looksLike32Hex(s) {
+  return /^[0-9a-f]{32}$/i.test(String(s));
 }
-async function safeText(resp) {
-  try {
-    return await resp.text();
-  } catch {
-    return "";
-  }
-}
-function extractUserIdFromUrl(url) {
-  // url like: /users/{id}?$select=...
-  const m = String(url || "").match(/\/users\/([^?]+)/i);
-  return m ? decodeURIComponent(m[1]) : "";
-}
-function findAadKeyById(map, id) {
-  // keys are "provider|id"
-  for (const [k, v] of map.entries()) {
-    if (v.provider.toLowerCase() === "aad" && String(v.id).toLowerCase() === String(id).toLowerCase()) return k;
-  }
-  return "";
-}
-function looksLikeGuid(s) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s));
+function hyphenateGuid(hex32) {
+  // XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+  const h = String(hex32);
+  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
 }
