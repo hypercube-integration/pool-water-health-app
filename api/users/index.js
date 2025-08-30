@@ -1,9 +1,7 @@
 // BEGIN FILE: api/users/index.js
-// VERSION: 2025-08-29
-// NOTES:
-// - Lists SWA users via ARM, enriches AAD users via Microsoft Graph.
-// - Handles AAD ids that are 32-hex without hyphens by hyphenating to GUID.
-// - Add ?debug=1 to response to include enrichment stats.
+// VERSION: 2025-08-29 (with Graph debug)
+// Lists SWA users via ARM, enriches AAD users via Microsoft Graph.
+// Adds meta.graphLast to response when ?debug=1.
 
 const { DefaultAzureCredential } = require("@azure/identity");
 const { WebSiteManagementClient } = require("@azure/arm-appservice");
@@ -17,13 +15,11 @@ const ENRICH_AAD = String(process.env.GRAPH_ENRICH_AAD || "true").toLowerCase() 
 
 module.exports = async function (context, req) {
   try {
-    // ---- RBAC (SWA EasyAuth) ----
     const principal = parseClientPrincipal(req);
     if (!hasAnyRole(principal, ["admin", "manager"])) {
       return (context.res = json(403, { error: "Forbidden" }));
     }
 
-    // ---- Query params ----
     const page = clampInt(req.query.page, DEFAULT_PAGE, 1, 100000);
     const pageSize = clampInt(req.query.pageSize, DEFAULT_PAGE_SIZE, 1, 200);
     const search = (req.query.search || "").toString().trim().toLowerCase();
@@ -31,7 +27,6 @@ module.exports = async function (context, req) {
     const sortDir = ALLOWED_DIR.has(req.query.sortDir) ? req.query.sortDir : "asc";
     const debug = req.query.debug === "1";
 
-    // ---- Env ----
     const subId = mustEnv("APPSERVICE_SUBSCRIPTION_ID");
     const rg = mustEnv("APPSERVICE_RESOURCE_GROUP");
     const site = mustEnv("APPSERVICE_STATIC_SITE_NAME");
@@ -39,7 +34,6 @@ module.exports = async function (context, req) {
     const credential = new DefaultAzureCredential();
     const client = new WebSiteManagementClient(credential, subId);
 
-    // ---- Gather users from providers ----
     const map = new Map(); // key: provider|id
     for (const provider of PROVIDERS) {
       try {
@@ -51,25 +45,22 @@ module.exports = async function (context, req) {
       }
     }
     if (map.size === 0) {
-      // fallback 'all'
       for await (const u of client.staticSites.listStaticSiteUsers(rg, site, "all")) {
         addUser(map, u, "all");
       }
     }
 
-    // ---- Optional AAD enrichment via Graph ----
-    const meta = { graphAttempted: 0, graphSucceeded: 0 };
+    const meta = { graphAttempted: 0, graphSucceeded: 0, graphLast: null };
     if (ENRICH_AAD && map.size > 0) {
       try {
         await enrichAadUsers(context, credential, map, meta);
       } catch (e) {
         context.log("Graph enrichment error:", e?.message || e);
+        meta.graphLast = { status: 0, message: String(e?.message || e) };
       }
     }
 
     const all = Array.from(map.values());
-
-    // ---- filter/sort/page ----
     let filtered = all;
     if (search) {
       filtered = all.filter((r) =>
@@ -140,10 +131,7 @@ function addUser(map, u, providerHint) {
   const display = (p.displayName || "").trim();
   const email = /@/.test(display) ? display : "";
 
-  const rolesArr = (p.roles || "")
-    .split(",")
-    .map((r) => r.trim())
-    .filter(Boolean);
+  const rolesArr = (p.roles || "").split(",").map((r) => r.trim()).filter(Boolean);
   const normalizedRoles = rolesArr.length ? rolesArr : ["authenticated"];
   const primary = normalizedRoles.find((r) => r !== "anonymous") || "authenticated";
 
@@ -154,13 +142,12 @@ function addUser(map, u, providerHint) {
     role: primary,
     roles: normalizedRoles.filter((r) => r !== "anonymous"),
     provider,
-    createdAt: "" // not provided by Mgmt API
+    createdAt: ""
   };
 
   const key = `${rec.provider}|${rec.id}`;
   const existing = map.get(key);
   if (!existing) return map.set(key, rec);
-
   const betterName = existing.name === "(unknown)" && rec.name !== "(unknown)";
   const moreRoles = (rec.roles?.length || 0) > (existing.roles?.length || 0);
   const prefer = betterName || moreRoles || (!existing.email && rec.email);
@@ -168,26 +155,23 @@ function addUser(map, u, providerHint) {
 }
 
 async function enrichAadUsers(context, credential, map, meta) {
-  // pull AAD users
   const entries = Array.from(map.entries()).filter(([k, v]) => v.provider === "aad");
   if (entries.length === 0) return;
 
-  // acquire Graph token
   const tokenObj = await credential.getToken("https://graph.microsoft.com/.default");
   const accessToken = tokenObj?.token;
   if (!accessToken) throw new Error("Unable to acquire Graph access token");
 
   for (const [key, rec] of entries) {
     const rawId = String(rec.id || "");
-    // Try hyphenated GUID if raw is 32-hex
     const hyphenated = looksLike32Hex(rawId) ? hyphenateGuid(rawId) : rawId;
 
     meta.graphAttempted++;
 
-    // First try hyphenated (if changed), else raw
     const candidates = hyphenated && hyphenated !== rawId ? [hyphenated, rawId] : [rawId];
-
     let got = null;
+    let last = { status: 0, message: "" };
+
     for (const cand of candidates) {
       const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(cand)}?$select=displayName,mail,userPrincipalName`;
       const resp = await fetch(url, {
@@ -195,33 +179,28 @@ async function enrichAadUsers(context, credential, map, meta) {
       });
       if (resp.ok) {
         got = await resp.json();
+        last = { status: resp.status, message: "OK" };
         break;
+      } else {
+        const t = await safeText(resp);
+        last = { status: resp.status, message: t || resp.statusText };
       }
-      // 404/400 → try next candidate
     }
 
     if (got) {
       meta.graphSucceeded++;
       const displayName = got.displayName || "";
       const email = got.mail || got.userPrincipalName || "";
-
       const updated = { ...rec };
-      if (displayName && (rec.name === "(unknown)" || looksLike32Hex(rec.name))) {
-        updated.name = displayName;
-      }
-      if (email && !rec.email) {
-        updated.email = email;
-      }
+      if (displayName && (rec.name === "(unknown)" || looksLike32Hex(rec.name))) updated.name = displayName;
+      if (email && !rec.email) updated.email = email;
       map.set(key, updated);
+    } else {
+      meta.graphLast = last; // e.g., { status: 403, message: "...Insufficient privileges..." }
     }
   }
 }
 
-function looksLike32Hex(s) {
-  return /^[0-9a-f]{32}$/i.test(String(s));
-}
-function hyphenateGuid(hex32) {
-  // XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
-  const h = String(hex32);
-  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
-}
+async function safeText(resp) { try { return await resp.text(); } catch { return ""; } }
+function looksLike32Hex(s) { return /^[0-9a-f]{32}$/i.test(String(s)); }
+function hyphenateGuid(h) { const x=String(h); return `${x.slice(0,8)}-${x.slice(8,12)}-${x.slice(12,16)}-${x.slice(16,20)}-${x.slice(20)}`; }
