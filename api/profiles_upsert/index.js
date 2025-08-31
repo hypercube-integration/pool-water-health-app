@@ -28,4 +28,4 @@ module.exports = async function (context, req) {
 function json(status, body){ return { status, headers: { "content-type":"application/json" }, body }; }
 function parseCP(req){ try{ const h=req.headers["x-ms-client-principal"]; if(!h) return null; const d=Buffer.from(h,"base64").toString("utf8"); const cp=JSON.parse(d); cp.userRoles=(cp.userRoles||[]).filter(r=>r!=="anonymous"); return cp; }catch{return null;} }
 function hasAnyRole(cp, allowed){ if(!cp) return false; const set=new Set((cp.userRoles||[]).map(String)); return allowed.some(r=>set.has(String(r))); }
-function getCosmosConfig(){ const conn=process.env.COSMOS_CONNSTR||"", db=process.env.COSMOS_DB||"", c=process.env.COSMOS_CONTAINER||""; return conn&&db&&c?{enabled:true, conn, db, container:c}:{enabled:false}; }
+function getCosmosConfig(){ const conn=process.env.COSMOS_CONNECTION_STRING||"", db=process.env.COSMOS_DB||"", c=process.env.COSMOS_CONTAINER||""; return conn&&db&&c?{enabled:true, conn, db, container:c}:{enabled:false}; }

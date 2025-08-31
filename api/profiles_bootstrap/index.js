@@ -27,7 +27,7 @@ module.exports = async function (context, req) {
 };
 
 function json(status, body) { return { status, headers: { "content-type": "application/json" }, body }; }
-function getCosmosConfig(){ const conn=process.env.COSMOS_CONNSTR||"", db=process.env.COSMOS_DB||"", container=process.env.COSMOS_CONTAINER||""; return conn&&db&&container?{enabled:true,conn,db,container}:{enabled:false}; }
+function getCosmosConfig(){ const conn=process.env.COSMOS_CONNECTION_STRING||"", db=process.env.COSMOS_DB||"", container=process.env.COSMOS_CONTAINER||""; return conn&&db&&container?{enabled:true,conn,db,container}:{enabled:false}; }
 function parseClientPrincipal(req){ try{ const b64=req.headers["x-ms-client-principal"]; if(!b64) return null; const raw=Buffer.from(b64,"base64").toString("utf8"); const cp=JSON.parse(raw); const roles=(cp.userRoles||[]).filter(r=>r!=="anonymous"); const claims=Array.isArray(cp.claims)?cp.claims:[]; const provider=(cp.identityProvider||"").toLowerCase(); const userId=cp.userId; return {...cp, roles, claims, provider, userId}; }catch{return null;} }
 function isAuthenticated(cp){ return Array.isArray(cp.roles)&&cp.roles.includes("authenticated"); }
 function getClaim(cp,...types){ if(!cp?.claims) return ""; for(const t of types){ const c=cp.claims.find(x=>(x.typ||x.type)===t); if(c?.val) return String(c.val);} return ""; }
