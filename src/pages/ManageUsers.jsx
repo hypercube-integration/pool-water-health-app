@@ -1,16 +1,17 @@
-// BEGIN FILE: src/pages/ManageUsers.jsx
-// VERSION: 2025-08-30 (Cosmos profiles)
+// FILE: src/pages/ManageUsers.jsx  (DROP-IN REPLACEMENT)
+// - Uses your existing /hooks/useUsers to fetch the list
+// - Admin actions now show errors if API returns 403/500
+// - Only enables role actions for admins/managers
+
 import React, { useMemo, useState } from "react";
+import { useAuth } from "../App";
 import { toCsv, downloadCsv } from "../utils/csv";
-import { hasAnyRole } from "../auth/roles";
 import { useUsers } from "../hooks/useUsers";
-import { useCurrentUser } from "../hooks/useCurrentUser";
 
 const ROLE_OPTIONS = ["admin", "manager", "contributor", "viewer"];
 
 export default function ManageUsersPage() {
-  const { roles, loading: authLoading } = useCurrentUser();
-  const canAdmin = hasAnyRole({ roles }, ["admin", "manager"]);
+  const { user, loading: authLoading, isAdmin } = useAuth();
 
   const {
     rows, total, totalPages, loading, error,
@@ -25,6 +26,8 @@ export default function ManageUsersPage() {
   const [invHours, setInvHours] = useState(24);
   const [inviteUrl, setInviteUrl] = useState("");
 
+  const [actionMsg, setActionMsg] = useState(null);
+
   const cols = useMemo(() => ([
     { key: "name", headerName: "Name" },
     { key: "email", headerName: "Email", selector: (r) => r.email || "" },
@@ -37,71 +40,96 @@ export default function ManageUsersPage() {
     { key: "__actions", headerName: "Actions" }
   ]), []);
 
-  if (authLoading) {
-    return <div className="p-6"><h1 className="text-2xl font-semibold">Manage Users &amp; Roles</h1><div className="mt-4 text-gray-500">Checking your access…</div></div>;
-  }
-  if (!canAdmin) {
-    return <div className="p-6"><h1 className="text-2xl font-semibold">Manage Users &amp; Roles</h1><p className="mt-4 text-red-600">You don’t have access to this page.</p></div>;
-  }
+  const canManage = !!isAdmin;
 
   const handleExport = () => {
     const csv = toCsv(rows, cols.filter(c=>c.key!=="__actions"));
     downloadCsv(csv, "users");
   };
 
+  async function apiCall(url, init) {
+    setActionMsg(null);
+    const res = await fetch(url, { credentials: "include", ...init });
+    let text = "";
+    try { text = await res.text(); } catch {}
+    if (!res.ok) {
+      const msg = text || `${res.status} ${res.statusText}`;
+      setActionMsg({ type: "error", text: msg });
+      throw new Error(msg);
+    }
+    setActionMsg({ type: "ok", text: "Saved." });
+    return text ? JSON.parse(text).catch(()=> ({})) : {};
+  }
+
   async function setRole(user, role) {
-    const body = { provider: user.provider, userId: user.id, roles: [role] };
-    await fetch("/api/users/update", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), credentials: "include" });
+    await apiCall("/api/users/update", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider: user.provider, userId: user.id, roles: [role] })
+    });
     reload();
   }
   async function clearRoles(user) {
-    const body = { provider: user.provider, userId: user.id, roles: [] };
-    await fetch("/api/users/update", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), credentials: "include" });
+    await apiCall("/api/users/update", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider: user.provider, userId: user.id, roles: [] })
+    });
     reload();
   }
   async function deleteUser(user) {
     if (!confirm(`Remove user from ${user.provider}? This clears their custom roles.`)) return;
-    const body = { provider: user.provider, userId: user.id };
-    await fetch("/api/users/delete", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), credentials: "include" });
+    await apiCall("/api/users/delete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider: user.provider, userId: user.id })
+    });
     reload();
   }
   async function setProfile(user) {
     const name = prompt("Display name:", (user.name && user.name !== user.id) ? user.name : "") || "";
     const email = prompt("Email (optional):", user.email || "") || "";
-    const body = { provider: user.provider, userId: user.id, name: name.trim(), email: email.trim() };
-    const res = await fetch("/api/profiles/upsert", {
+    await apiCall("/api/profiles/upsert", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      credentials: "include"
+      body: JSON.stringify({ provider: user.provider, userId: user.id, name: name.trim(), email: email.trim() })
     });
-    if (!res.ok) {
-      const t = await res.text();
-      alert(`Failed to save profile: ${t || res.status}`);
-    }
     reload();
   }
 
   async function createInvite(e) {
     e.preventDefault();
     setInviteUrl("");
-    const body = { provider: invProvider, userDetails: invUser.trim(), roles: invRoles, hours: Number(invHours) || 24 };
-    const res = await fetch("/api/users/invite", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), credentials: "include" });
-    const data = await res.json().catch(()=> ({}));
-    if (res.ok && data?.invitationUrl) setInviteUrl(data.invitationUrl);
-    else alert(data?.message || "Failed to create invitation");
+    try {
+      const data = await apiCall("/api/users/invite", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          provider: invProvider,
+          userDetails: invUser.trim(),
+          roles: invRoles,
+          hours: Number(invHours) || 24
+        })
+      });
+      if (data?.invitationUrl) setInviteUrl(data.invitationUrl);
+    } catch {
+      // message already set
+    }
   }
 
   return (
     <div className="p-6">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold">Manage Users &amp; Roles</h1>
+      <h1 className="text-4xl font-extrabold mb-4">Manage Users &amp; Roles</h1>
 
+      {authLoading ? (
+        <div className="text-gray-500 mb-4">Checking your access…</div>
+      ) : !canManage ? (
+        <div className="text-red-500 mb-4">You don’t have access to manage users.</div>
+      ) : null}
+
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <button onClick={handleExport} className="px-3 py-2 rounded bg-gray-800 text-white hover:opacity-90">Export CSV</button>
-
-        <button onClick={() => setInviteOpen(true)} className="px-3 py-2 rounded bg-blue-600 text-white hover:opacity-90">
-          Invite user
-        </button>
+        <button onClick={() => setInviteOpen(true)} className="px-3 py-2 rounded bg-blue-600 text-white hover:opacity-90">Invite user</button>
 
         <div className="ml-auto flex items-center gap-2">
           <input
@@ -121,6 +149,12 @@ export default function ManageUsersPage() {
           </select>
         </div>
       </div>
+
+      {actionMsg && (
+        <div className={`mb-3 px-3 py-2 rounded ${actionMsg.type === "ok" ? "bg-green-600/20 text-green-200" : "bg-red-600/20 text-red-200"}`}>
+          {actionMsg.text}
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded border border-gray-200">
         <table className="min-w-full text-sm">
@@ -163,14 +197,14 @@ export default function ManageUsersPage() {
                       Set name/email
                     </button>
                     {ROLE_OPTIONS.map((r) => (
-                      <button key={r} className="px-2 py-1 text-xs rounded border hover:bg-gray-50" onClick={() => setRole(u, r)}>
+                      <button key={r} className="px-2 py-1 text-xs rounded border hover:bg-gray-50" disabled={!canManage} onClick={() => setRole(u, r)}>
                         Set {r}
                       </button>
                     ))}
-                    <button className="px-2 py-1 text-xs rounded border hover:bg-gray-50" onClick={() => clearRoles(u)}>
+                    <button className="px-2 py-1 text-xs rounded border hover:bg-gray-50" disabled={!canManage} onClick={() => clearRoles(u)}>
                       Clear roles
                     </button>
-                    <button className="px-2 py-1 text-xs rounded border text-red-600 hover:bg-red-50" onClick={() => deleteUser(u)}>
+                    <button className="px-2 py-1 text-xs rounded border text-red-600 hover:bg-red-50" disabled={!canManage} onClick={() => deleteUser(u)}>
                       Delete
                     </button>
                   </div>

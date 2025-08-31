@@ -1,4 +1,4 @@
-// FILE: src/App.jsx
+// FILE: src/App.jsx  (DROP-IN REPLACEMENT)
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState, createContext, useContext } from "react";
 
@@ -8,7 +8,7 @@ import SettingsPanel from "./components/SettingsPanel.jsx";
 import Admin from "./pages/Manage.jsx";
 import AdminUsers from "./pages/ManageUsers.jsx";
 
-// Header with login menu
+// New header (appears on every page)
 import Header from "./components/Header.jsx";
 
 /* ---------------------- Auth context via /.auth/me ---------------------- */
@@ -27,14 +27,25 @@ function AuthProvider({ children }) {
       setLoading(true);
       const res = await fetch("/.auth/me", { credentials: "include" });
       const json = await res.json();
-      const cp = json?.clientPrincipal || json?.[0]?.clientPrincipal || json?.[0] || null;
-      const roles = (cp?.userRoles || []).filter(Boolean) || [];
+
+      // SWA can return either {clientPrincipal} or an array shape
+      const cp =
+        json?.clientPrincipal ||
+        json?.[0]?.clientPrincipal ||
+        json?.[0] ||
+        null;
+
+      // IMPORTANT: filter out 'anonymous' so isAuthenticated can be true
+      const roles = (cp?.userRoles || [])
+        .filter((r) => r && r !== "anonymous");
+
       const nextUser = {
-        isAuthenticated: !roles.includes("anonymous"),
+        isAuthenticated: roles.length > 0, // after filtering, any role means signed-in (usually includes 'authenticated')
         roles,
-        userDetails: cp?.userDetails,
-        identityProvider: cp?.identityProvider
+        userDetails: cp?.userDetails || "",
+        identityProvider: cp?.identityProvider || ""
       };
+
       setUser(nextUser);
 
       // Auto-bootstrap profile to Cosmos (name/email) once the user is authenticated
@@ -48,12 +59,15 @@ function AuthProvider({ children }) {
       }
     } catch {
       setUser({ isAuthenticated: false, roles: [] });
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { loadMe(); }, []);
+
   const isAdmin = useMemo(
-    () => (user?.roles || []).map(r => String(r).toLowerCase()).includes("admin"),
+    () => (user?.roles || []).map(r => String(r).toLowerCase()).some(r => r === "admin" || r === "manager"),
     [user]
   );
 
@@ -76,7 +90,7 @@ function AuthProvider({ children }) {
 export default function App() {
   return (
     <AuthProvider>
-      {/* New header shown on every page */}
+      {/* Header shown on every page with AAD/GitHub login options */}
       <Header />
 
       <Routes>
