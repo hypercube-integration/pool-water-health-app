@@ -1,51 +1,47 @@
-// FILE: src/hooks/useUsers.js
-import { useEffect, useMemo, useState } from "react";
-import { getUsers } from "../services/usersService";
+// FILE: src/utils/csv.js
+// Small CSV helper with named exports: toCsv, downloadCsv
 
-export function useUsers(initial = {}) {
-  const [page, setPage] = useState(initial.page ?? 1);
-  const [pageSize, setPageSize] = useState(initial.pageSize ?? 10);
-  const [search, setSearch] = useState(initial.search ?? "");
-  const [sortBy, setSortBy] = useState(initial.sortBy ?? "createdAt");
-  const [sortDir, setSortDir] = useState(initial.sortDir ?? "desc");
-
-  const [rows, setRows] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const params = { page, pageSize, search, sortBy, sortDir };
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError("");
-    (async () => {
-      try {
-        const { rows, total } = await getUsers(params);
-        if (!cancelled) {
-          setRows(rows);
-          setTotal(total);
-        }
-      } catch (e) {
-        if (!cancelled) setError(e?.message || "Failed to load users");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [params.page, params.pageSize, params.search, params.sortBy, params.sortDir]);
-
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
-  const toggleSort = (key) => {
-    if (sortBy === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortBy(key); setSortDir("asc"); }
+/**
+ * Create a CSV string from rows and column descriptors.
+ * @param {Array<object>} rows - array of row objects
+ * @param {Array<{key:string, headerName?:string, selector?:(row:any)=>any}>} columns
+ */
+export function toCsv(rows, columns) {
+  const escape = (v) => {
+    if (v === null || v === undefined) return "";
+    const s = String(v);
+    // Quote if it contains comma, quote, or newline
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
 
-  return {
-    rows, total, totalPages, loading, error,
-    page, pageSize, search, sortBy, sortDir,
-    setPage, setPageSize, setSearch, toggleSort,
-    reload: () => { setPage((p) => p); } // quick way to re-trigger
-  };
+  const header = columns.map(c => escape(c.headerName || c.key)).join(",");
+  const lines = rows.map(r =>
+    columns.map(c => {
+      const val = typeof c.selector === "function" ? c.selector(r) : r[c.key];
+      return escape(val);
+    }).join(",")
+  );
+
+  return [header, ...lines].join("\n");
+}
+
+/**
+ * Trigger a client-side download of a CSV string.
+ * @param {string} csvString
+ * @param {string} baseName - filename without extension
+ */
+export function downloadCsv(csvString, baseName = "export") {
+  const pad = (n) => String(n).padStart(2, "0");
+  const d = new Date();
+  const name = `${baseName}-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.csv`;
+
+  const blob = new Blob([csvString], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
