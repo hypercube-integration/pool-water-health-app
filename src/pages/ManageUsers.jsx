@@ -1,24 +1,21 @@
-// FILE: src/pages/ManageUsers.jsx  (DROP-IN REPLACEMENT)
-// - Uses your existing /hooks/useUsers to fetch the list
-// - Admin actions now show errors if API returns 403/500
-// - Only enables role actions for admins/managers
-
+// FILE: src/pages/ManageUsers.jsx
 import React, { useMemo, useState } from "react";
 import { useAuth } from "../App";
-import { toCsv, downloadCsv } from "../utils/csv";
 import { useUsers } from "../hooks/useUsers";
+import { toCsv, downloadCsv } from "../utils/csv";
+import { inviteUser, setRoles, clearRoles, deleteUser, setNameEmail } from "../services/usersService";
 
-const ROLE_OPTIONS = ["admin", "manager", "contributor", "viewer"];
+const ROLE_OPTIONS = ["admin","manager","contributor","viewer"];
 
 export default function ManageUsersPage() {
-  const { user, loading: authLoading, isAdmin } = useAuth();
-
+  const { user, loading: authLoading } = useAuth();
   const {
     rows, total, totalPages, loading, error,
     page, pageSize, search, sortBy, sortDir,
     setPage, setPageSize, setSearch, toggleSort, reload
   } = useUsers({ page: 1, pageSize: 10, sortBy: "name", sortDir: "asc" });
 
+  const [msg, setMsg] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
   const [invProvider, setInvProvider] = useState("aad");
   const [invUser, setInvUser] = useState("");
@@ -26,253 +23,158 @@ export default function ManageUsersPage() {
   const [invHours, setInvHours] = useState(24);
   const [inviteUrl, setInviteUrl] = useState("");
 
-  const [actionMsg, setActionMsg] = useState(null);
-
-  const cols = useMemo(() => ([
+  const columns = useMemo(() => ([
     { key: "name", headerName: "Name" },
-    { key: "email", headerName: "Email", selector: (r) => r.email || "" },
+    { key: "email", headerName: "Email" },
     { key: "provider", headerName: "Provider" },
-    {
-      key: "roles",
-      headerName: "Roles",
-      selector: (r) => Array.isArray(r.roles) ? r.roles.join(", ") : (r.role || "")
-    },
-    { key: "__actions", headerName: "Actions" }
+    { key: "roles", headerName: "Roles", selector: (r)=> (r.roles||[]).join(", ") }
   ]), []);
 
-  const canManage = !!isAdmin;
-
-  const handleExport = () => {
-    const csv = toCsv(rows, cols.filter(c=>c.key!=="__actions"));
+  function doExport() {
+    const csv = toCsv(rows, columns);
     downloadCsv(csv, "users");
-  };
-
-  async function apiCall(url, init) {
-    setActionMsg(null);
-    const res = await fetch(url, { credentials: "include", ...init });
-    let text = "";
-    try { text = await res.text(); } catch {}
-    if (!res.ok) {
-      const msg = text || `${res.status} ${res.statusText}`;
-      setActionMsg({ type: "error", text: msg });
-      throw new Error(msg);
-    }
-    setActionMsg({ type: "ok", text: "Saved." });
-    return text ? JSON.parse(text).catch(()=> ({})) : {};
   }
 
-  async function setRole(user, role) {
-    await apiCall("/api/users/update", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ provider: user.provider, userId: user.id, roles: [role] })
-    });
-    reload();
-  }
-  async function clearRoles(user) {
-    await apiCall("/api/users/update", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ provider: user.provider, userId: user.id, roles: [] })
-    });
-    reload();
-  }
-  async function deleteUser(user) {
-    if (!confirm(`Remove user from ${user.provider}? This clears their custom roles.`)) return;
-    await apiCall("/api/users/delete", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ provider: user.provider, userId: user.id })
-    });
-    reload();
-  }
-  async function setProfile(user) {
-    const name = prompt("Display name:", (user.name && user.name !== user.id) ? user.name : "") || "";
-    const email = prompt("Email (optional):", user.email || "") || "";
-    await apiCall("/api/profiles/upsert", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ provider: user.provider, userId: user.id, name: name.trim(), email: email.trim() })
-    });
-    reload();
-  }
-
-  async function createInvite(e) {
+  async function doInvite(e){
     e.preventDefault();
-    setInviteUrl("");
+    setMsg("");
     try {
-      const data = await apiCall("/api/users/invite", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          provider: invProvider,
-          userDetails: invUser.trim(),
-          roles: invRoles,
-          hours: Number(invHours) || 24
-        })
-      });
-      if (data?.invitationUrl) setInviteUrl(data.invitationUrl);
-    } catch {
-      // message already set
+      const { url } = await inviteUser({ provider: invProvider, userDetails: invUser.trim(), roles: invRoles, hours: invHours });
+      setInviteUrl(url);
+      setInviteOpen(false);
+      setMsg("Invite created.");
+    } catch (e) {
+      setMsg(e.message);
     }
+  }
+
+  async function applyRoles(r, roles){
+    setMsg("");
+    try {
+      await setRoles({ provider: r.provider, userId: r.id, roles });
+      setMsg("Roles updated.");
+      reload();
+    } catch (e) { setMsg(e.message); }
+  }
+  async function doClear(r){ try { await clearRoles({ provider: r.provider, userId: r.id }); setMsg("Roles cleared."); reload(); } catch(e){ setMsg(e.message); } }
+  async function doDelete(r){ if (!confirm("Delete this user from SWA?")) return; try { await deleteUser({ provider: r.provider, userId: r.id }); setMsg("User deleted."); reload(); } catch(e){ setMsg(e.message); } }
+  async function doSetNameEmail(r){
+    const name = prompt("Enter name", r.name || "");
+    if (name === null) return;
+    const email = prompt("Enter email", r.email || "");
+    if (email === null) return;
+    try {
+      await setNameEmail({ provider: r.provider, userId: r.id, name, email });
+      setMsg("Profile saved."); reload();
+    } catch(e){ setMsg(e.message); }
   }
 
   return (
-    <div className="p-6">
-      <h1 className="text-4xl font-extrabold mb-4">Manage Users &amp; Roles</h1>
+    <div className="p-4 text-white">
+      <h1 className="text-3xl font-bold mb-4">Manage Users &amp; Roles</h1>
 
-      {authLoading ? (
-        <div className="text-gray-500 mb-4">Checking your access…</div>
-      ) : !canManage ? (
-        <div className="text-red-500 mb-4">You don’t have access to manage users.</div>
-      ) : null}
-
-      <div className="mb-3 flex flex-wrap items-center gap-3">
-        <button onClick={handleExport} className="px-3 py-2 rounded bg-gray-800 text-white hover:opacity-90">Export CSV</button>
-        <button onClick={() => setInviteOpen(true)} className="px-3 py-2 rounded bg-blue-600 text-white hover:opacity-90">Invite user</button>
-
-        <div className="ml-auto flex items-center gap-2">
-          <input
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Search users…"
-            className="border border-gray-300 rounded px-3 py-2 min-w-[240px]"
-            aria-label="Search users"
-          />
-          <select
-            value={pageSize}
-            onChange={(e) => { const next = Number(e.target.value) || 10; setPageSize(next); setPage(1); }}
-            className="border border-gray-300 rounded px-2 py-2"
-            aria-label="Rows per page"
-          >
-            {[10, 20, 50].map((s) => <option key={s} value={s}>{s}/page</option>)}
-          </select>
-        </div>
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <button className="px-3 py-2 rounded bg-gray-700" onClick={doExport}>Export CSV</button>
+        <button className="px-3 py-2 rounded bg-blue-600" onClick={()=>setInviteOpen(true)}>Invite user</button>
+        <input className="ml-2 px-2 py-1 rounded bg-neutral-800 border border-neutral-700" placeholder="Search users..." value={search} onChange={e=>setSearch(e.target.value)} />
+        <select className="px-2 py-1 rounded bg-neutral-800 border border-neutral-700" value={pageSize} onChange={e=>setPageSize(parseInt(e.target.value,10))}>
+          {[10,20,50,100].map(n=><option key={n} value={n}>{n}/page</option>)}
+        </select>
+        <span className="ml-auto text-sm text-gray-400">{loading ? "Loading…" : `${total} total`}</span>
       </div>
 
-      {actionMsg && (
-        <div className={`mb-3 px-3 py-2 rounded ${actionMsg.type === "ok" ? "bg-green-600/20 text-green-200" : "bg-red-600/20 text-red-200"}`}>
-          {actionMsg.text}
-        </div>
-      )}
+      {error && <div className="mb-3 text-red-400">Error: {error}</div>}
+      {msg && <div className="mb-3 text-emerald-400">{msg}</div>}
 
-      <div className="overflow-x-auto rounded border border-gray-200">
+      <div className="overflow-auto border border-neutral-800 rounded">
         <table className="min-w-full text-sm">
-          <thead className="bg-gray-50 text-gray-700">
+          <thead className="bg-neutral-900">
             <tr>
-              {cols.map((c) => {
-                const active = sortBy === c.key;
-                return (
-                  <th key={c.key} className="text-left font-medium px-3 py-2 border-b border-gray-200">
-                    {c.key === "__actions" ? <span>{c.headerName}</span> : (
-                      <button className={`inline-flex items-center gap-1 ${active ? "text-gray-900" : "text-gray-700"} hover:underline`} onClick={() => toggleSort(c.key)}>
-                        <span>{c.headerName}</span>{active && <span aria-hidden="true">{sortDir === "asc" ? "▲" : "▼"}</span>}
-                      </button>
-                    )}
-                  </th>
-                );
-              })}
+              {columns.map(c=>(
+                <th key={c.key} className="text-left px-3 py-2 cursor-pointer" onClick={()=>toggleSort(c.key)}>
+                  {c.headerName}{sortBy===c.key ? (sortDir==="asc"?" ▲":" ▼"):""}
+                </th>
+              ))}
+              <th className="text-left px-3 py-2">Actions</th>
             </tr>
           </thead>
-          <tbody className="bg-white text-gray-900">
-            {loading && <tr><td colSpan={cols.length} className="px-3 py-6 text-center text-gray-500">Loading…</td></tr>}
-            {!loading && error && <tr><td colSpan={cols.length} className="px-3 py-6 text-center text-red-600">{error}</td></tr>}
-            {!loading && !error && rows.length === 0 && <tr><td colSpan={cols.length} className="px-3 py-6 text-center text-gray-500">No users found</td></tr>}
-
-            {!loading && !error && rows.map((u) => (
-              <tr key={`${u.provider}|${u.id}`} className="hover:bg-gray-50">
-                <td className="px-3 py-2 border-b border-gray-100">{u.name || ""}</td>
-                <td className="px-3 py-2 border-b border-gray-100">{u.email || ""}</td>
-                <td className="px-3 py-2 border-b border-gray-100">
-                  <span className="inline-block rounded px-2 py-1 border text-xs">{u.provider || "—"}</span>
-                </td>
-                <td className="px-3 py-2 border-b border-gray-100">
-                  {Array.isArray(u.roles) && u.roles.length > 0 ? u.roles.map((r) => (
-                    <span key={r} className="inline-block mr-1 mb-1 rounded-full px-2 py-0.5 border text-xs">{r}</span>
-                  )) : <span className="text-gray-500">authenticated</span>}
-                </td>
-                <td className="px-3 py-2 border-b border-gray-100">
+          <tbody>
+            {rows.map(r=>(
+              <tr key={`${r.provider}:${r.id}`} className="border-t border-neutral-800">
+                <td className="px-3 py-2">{r.name || r.id}</td>
+                <td className="px-3 py-2">{r.email || ""}</td>
+                <td className="px-3 py-2">{r.provider}</td>
+                <td className="px-3 py-2">{(r.roles||[]).join(", ")}</td>
+                <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-2">
-                    <button className="px-2 py-1 text-xs rounded border hover:bg-gray-50" onClick={() => setProfile(u)}>
-                      Set name/email
-                    </button>
-                    {ROLE_OPTIONS.map((r) => (
-                      <button key={r} className="px-2 py-1 text-xs rounded border hover:bg-gray-50" disabled={!canManage} onClick={() => setRole(u, r)}>
-                        Set {r}
-                      </button>
-                    ))}
-                    <button className="px-2 py-1 text-xs rounded border hover:bg-gray-50" disabled={!canManage} onClick={() => clearRoles(u)}>
-                      Clear roles
-                    </button>
-                    <button className="px-2 py-1 text-xs rounded border text-red-600 hover:bg-red-50" disabled={!canManage} onClick={() => deleteUser(u)}>
-                      Delete
-                    </button>
+                    <button className="px-2 py-1 rounded bg-neutral-700" onClick={()=>doSetNameEmail(r)}>Set name/email</button>
+                    <button className="px-2 py-1 rounded bg-neutral-700" onClick={()=>applyRoles(r, ["admin"])}>Set admin</button>
+                    <button className="px-2 py-1 rounded bg-neutral-700" onClick={()=>applyRoles(r, ["manager"])}>Set manager</button>
+                    <button className="px-2 py-1 rounded bg-neutral-700" onClick={()=>applyRoles(r, ["contributor"])}>Set contributor</button>
+                    <button className="px-2 py-1 rounded bg-neutral-700" onClick={()=>applyRoles(r, ["viewer"])}>Set viewer</button>
+                    <button className="px-2 py-1 rounded bg-neutral-800" onClick={()=>doClear(r)}>Clear roles</button>
+                    <button className="px-2 py-1 rounded bg-red-700" onClick={()=>doDelete(r)}>Delete</button>
                   </div>
                 </td>
               </tr>
             ))}
+            {!loading && rows.length===0 && (
+              <tr><td className="px-3 py-4 text-gray-400" colSpan={5}>No users</td></tr>
+            )}
           </tbody>
         </table>
       </div>
 
-      <div className="mt-3 flex items-center justify-between">
-        <div className="text-sm text-gray-600">{total.toLocaleString()} total • Page {page} of {totalPages}</div>
-        <div className="flex items-center gap-2">
-          <button className="px-3 py-2 rounded border border-gray-300 disabled:opacity-50" onClick={() => page > 1 && setPage(page - 1)} disabled={page <= 1}>Prev</button>
-          <span className="text-sm text-gray-700">Page {page}</span>
-          <button className="px-3 py-2 rounded border border-gray-300 disabled:opacity-50" onClick={() => page < totalPages && setPage(page + 1)} disabled={page >= totalPages}>Next</button>
-        </div>
+      <div className="flex items-center gap-2 mt-3">
+        <button disabled={page<=1} className="px-3 py-1 rounded border disabled:opacity-40" onClick={()=>setPage(page-1)}>Prev</button>
+        <span>Page {page} / {totalPages}</span>
+        <button disabled={page>=totalPages} className="px-3 py-1 rounded border disabled:opacity-40" onClick={()=>setPage(page+1)}>Next</button>
       </div>
 
       {inviteOpen && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-5">
-            <h2 className="text-lg font-semibold mb-3">Invite user</h2>
-            <form onSubmit={createInvite} className="space-y-3">
-              <div className="flex gap-3">
-                <label className="text-sm w-28 pt-2">Provider</label>
-                <select value={invProvider} onChange={(e)=>setInvProvider(e.target.value)} className="border rounded px-2 py-2 flex-1">
-                  <option value="aad">Microsoft Entra ID (AAD)</option>
-                  <option value="github">GitHub</option>
-                </select>
+        <form className="mt-6 p-4 border border-neutral-800 rounded max-w-xl bg-neutral-900" onSubmit={doInvite}>
+          <h2 className="text-lg font-semibold mb-2">Invite user</h2>
+          <div className="grid grid-cols-1 gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-sm text-gray-300">Provider</span>
+              <select className="px-2 py-1 rounded bg-neutral-800 border border-neutral-700" value={invProvider} onChange={e=>setInvProvider(e.target.value)}>
+                <option value="aad">Microsoft (AAD)</option>
+                <option value="github">GitHub</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-sm text-gray-300">User (email for AAD, username for GitHub)</span>
+              <input className="px-2 py-1 rounded bg-neutral-800 border border-neutral-700" value={invUser} onChange={e=>setInvUser(e.target.value)} required />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-sm text-gray-300">Roles</span>
+              <div className="flex flex-wrap gap-2">
+                {ROLE_OPTIONS.map(r=>(
+                  <label key={r} className="inline-flex items-center gap-1">
+                    <input type="checkbox" checked={invRoles.includes(r)} onChange={e=>{
+                      setInvRoles(s=> e.target.checked ? [...new Set([...s, r])] : s.filter(x=>x!==r));
+                    }}/>
+                    <span className="capitalize">{r}</span>
+                  </label>
+                ))}
               </div>
-              <div className="flex gap-3">
-                <label className="text-sm w-28 pt-2">User</label>
-                <input value={invUser} onChange={(e)=>setInvUser(e.target.value)} required
-                  placeholder={invProvider==="aad" ? "email or UPN (preferred)" : "github username"}
-                  className="border rounded px-3 py-2 flex-1" />
-              </div>
-              <div className="flex gap-3">
-                <label className="text-sm w-28 pt-2">Roles</label>
-                <div className="flex-1 flex flex-wrap gap-2">
-                  {ROLE_OPTIONS.map((r)=>(
-                    <label key={r} className="text-sm inline-flex items-center gap-1">
-                      <input type="checkbox" checked={invRoles.includes(r)} onChange={(e)=>{
-                        setInvRoles((prev)=> e.target.checked ? [...prev, r] : prev.filter(x=>x!==r));
-                      }}/>
-                      {r}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <label className="text-sm w-28 pt-2">Expires (hrs)</label>
-                <input type="number" min={1} max={168} value={invHours} onChange={(e)=>setInvHours(e.target.value)} className="border rounded px-3 py-2 w-28" />
-              </div>
-              <div className="flex justify-end gap-2 mt-2">
-                <button type="button" className="px-3 py-2 rounded border" onClick={()=>setInviteOpen(false)}>Close</button>
-                <button type="submit" className="px-3 py-2 rounded bg-blue-600 text-white">Create link</button>
-              </div>
-            </form>
-
-            {inviteUrl && (
-              <div className="mt-4">
-                <div className="text-sm text-gray-600 mb-1">Invitation URL:</div>
-                <div className="p-2 border rounded break-all text-sm bg-gray-50">{inviteUrl}</div>
-              </div>
-            )}
+            </label>
+            <label className="flex items-center gap-2">
+              <span className="text-sm text-gray-300">Expires (hours)</span>
+              <input className="px-2 py-1 rounded bg-neutral-800 border border-neutral-700 w-24" type="number" min="1" max="168" value={invHours} onChange={e=>setInvHours(parseInt(e.target.value,10)||24)} />
+            </label>
           </div>
-        </div>
+          <div className="mt-3 flex gap-2">
+            <button type="submit" className="px-3 py-2 rounded bg-blue-600">Create invite</button>
+            <button type="button" className="px-3 py-2 rounded border" onClick={()=>setInviteOpen(false)}>Cancel</button>
+          </div>
+          {inviteUrl && (
+            <div className="mt-3 text-sm">
+              <div className="text-gray-300">Invite URL:</div>
+              <a href={inviteUrl} className="text-sky-400 underline break-all">{inviteUrl}</a>
+            </div>
+          )}
+        </form>
       )}
     </div>
   );

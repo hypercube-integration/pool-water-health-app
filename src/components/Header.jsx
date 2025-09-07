@@ -1,11 +1,10 @@
-// FILE: src/components/Header.jsx
+// FILE: src/components/Header.jsx  (DROP-IN REPLACEMENT)
 import React from "react";
 import LoginMenu from "./LoginMenu";
-import { useAuth } from "../App"; // uses your existing context
+import { useAuth } from "../App";
 
 export default function Header() {
   const { user, loading } = useAuth();
-
   const roleList = (user?.roles || []).filter(Boolean).join(", ");
 
   return (

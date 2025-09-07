@@ -1,22 +1,23 @@
-// FILE: api/_shared/cosmosProfiles.js  (NEW helper, optional but tidy)
+// FILE: api/_shared/cosmosProfiles.js
+// Helper to create a Cosmos client and point at the Profiles container.
+// Uses your env names to avoid duplicates.
 const { CosmosClient } = require("@azure/cosmos");
 
 function getProfilesCosmos() {
   const conn =
     process.env.COSMOS_CONNECTION_STRING ||
-    process.env.COSMOS_CONNSTR || // legacy fallback (no need to set)
-    "";
+    ""; // preferred
 
   const endpoint = process.env.COSMOS_DB_ENDPOINT || "";
   const key = process.env.COSMOS_DB_KEY || "";
 
   const db =
-    process.env.COSMOS_DB_DATABASE || // <- your DB name
-    process.env.COSMOS_DB || "";      // fallback
+    process.env.COSMOS_DB_DATABASE || // your DB name
+    "";
 
   const container =
-    process.env.COSMOS_DB_PROFILES_CONTAINER || // <- your Profiles container
-    process.env.COSMOS_CONTAINER || "";         // fallback
+    process.env.COSMOS_DB_PROFILES_CONTAINER || // your Profiles container
+    "";
 
   let client = null;
   if (conn) client = new CosmosClient(conn);

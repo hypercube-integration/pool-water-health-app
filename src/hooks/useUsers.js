@@ -1,9 +1,6 @@
-// BEGIN FILE: src/hooks/useUsers.js
-// VERSION: 2025-08-24
-// NOTES: Hook managing users list + pagination/sort/search and loading/error state.
-
+// FILE: src/hooks/useUsers.js
 import { useEffect, useMemo, useState } from "react";
-import { getUsers } from "../services/usersService"; // <-- this path requires src/services/usersService.js
+import { getUsers } from "../services/usersService";
 
 export function useUsers(initial = {}) {
   const [page, setPage] = useState(initial.page ?? 1);
@@ -17,16 +14,13 @@ export function useUsers(initial = {}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const params = useMemo(
-    () => ({ page, pageSize, search, sortBy, sortDir }),
-    [page, pageSize, search, sortBy, sortDir]
-  );
+  const params = { page, pageSize, search, sortBy, sortDir };
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setError("");
     (async () => {
-      setLoading(true);
-      setError("");
       try {
         const { rows, total } = await getUsers(params);
         if (!cancelled) {
@@ -39,38 +33,19 @@ export function useUsers(initial = {}) {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [params.page, params.pageSize, params.search, params.sortBy, params.sortDir]);
 
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-
-  function toggleSort(columnKey) {
-    if (sortBy === columnKey) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(columnKey);
-      setSortDir("asc");
-    }
-  }
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
+  const toggleSort = (key) => {
+    if (sortBy === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortBy(key); setSortDir("asc"); }
+  };
 
   return {
-    rows,
-    total,
-    totalPages,
-    loading,
-    error,
-    page,
-    pageSize,
-    search,
-    sortBy,
-    sortDir,
-    setPage,
-    setPageSize,
-    setSearch,
-    setSortBy,
-    setSortDir,
-    toggleSort,
+    rows, total, totalPages, loading, error,
+    page, pageSize, search, sortBy, sortDir,
+    setPage, setPageSize, setSearch, toggleSort,
+    reload: () => { setPage((p) => p); } // quick way to re-trigger
   };
 }

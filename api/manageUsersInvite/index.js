@@ -1,81 +1,47 @@
-// BEGIN FILE: api/manageUsersInvite/index.js
-// ACTION: Create an invitation link (admin/manager) with correct domain
-// POST /api/users/invite  BODY: { provider: "aad"|"github", userDetails: "<email|upn|username>", roles: ["viewer"], hours?: 24, domain?: "<host>" }
-
+// FILE: api/manageUsersInvite/index.js
 const { DefaultAzureCredential } = require("@azure/identity");
 const { WebSiteManagementClient } = require("@azure/arm-appservice");
 
 module.exports = async function (context, req) {
   try {
     const cp = parseCP(req);
-    if (!hasAnyRole(cp, ["admin", "manager"])) {
-      return (context.res = json(403, { error: "Forbidden" }));
-    }
+    if (!hasAnyRole(cp, ["admin","manager"])) return json(context, 403, { error: "Forbidden" });
 
-    const { provider, userDetails, roles, hours, domain } = req.body || {};
-    if (!provider || !userDetails || !Array.isArray(roles)) {
-      return (context.res = json(400, { error: "BadRequest", message: "provider, userDetails, roles[] are required" }));
-    }
+    const { provider, userDetails, roles, hours=24, domain } = req.body || {};
+    if (!provider || !userDetails || !Array.isArray(roles)) return json(context, 400, { error: "BadRequest" });
 
-    // Gentle validation on userDetails
-    if (provider === "github" && /@/.test(userDetails)) {
-      return (context.res = json(400, { error: "BadRequest", message: "For GitHub invites, userDetails must be the GitHub username (not an email)." }));
-    }
+    const subId = must("APPSERVICE_SUBSCRIPTION_ID");
+    const rg = must("APPSERVICE_RESOURCE_GROUP");
+    const site = must("APPSERVICE_STATIC_SITE_NAME");
+    const cred = new DefaultAzureCredential();
+    const cli = new WebSiteManagementClient(cred, subId);
 
-    const subId = mustEnv("APPSERVICE_SUBSCRIPTION_ID");
-    const rg = mustEnv("APPSERVICE_RESOURCE_GROUP");
-    const site = mustEnv("APPSERVICE_STATIC_SITE_NAME");
-
-    const credential = new DefaultAzureCredential();
-    const client = new WebSiteManagementClient(credential, subId);
-
-    // Get the Static Web App default hostname from ARM to avoid domain mismatches
+    // get default hostname to build a good link if needed
     let defaultHost = "";
     try {
-      const siteRes = await client.staticSites.getStaticSite(rg, site);
-      defaultHost =
-        siteRes?.defaultHostname ||
-        siteRes?.properties?.defaultHostname ||
-        "";
-    } catch (e) {
-      context.log("getStaticSite failed:", e?.message || e);
-    }
+      const siteRes = await cli.staticSites.getStaticSite(rg, site);
+      defaultHost = siteRes?.defaultHostname || siteRes?.properties?.defaultHostname || "";
+    } catch {}
 
     const hostFromReq = (req.headers["x-forwarded-host"] || req.headers.host || "").toString();
-    const finalDomain = (domain || defaultHost || hostFromReq || "").replace(/^https?:\/\//, "").replace(/\/.*/, "");
+    const finalDomain = (domain || defaultHost || hostFromReq || "").replace(/^https?:\/\//, "");
 
-    if (!finalDomain) {
-      return (context.res = json(500, { error: "ServerError", message: "Could not determine site domain for invitation." }));
-    }
+    const invitation = await cli.staticSites.createUserRolesInvitationLink(
+      rg, site, provider,
+      { domain: finalDomain, userDetails, roles: roles.join(","), numHoursToExpiration: parseInt(hours,10) || 24 }
+    );
 
-    const rolesCsv = roles.map(String).map((r) => r.trim()).filter(Boolean).join(",");
+    const url = invitation?.properties?.link || invitation?.link || null;
+    if (!url) return json(context, 500, { error: "No invite URL returned", raw: invitation });
 
-    const payload = {
-      properties: {
-        domain: finalDomain,                 // <<< critical to avoid 400 at /.auth/complete
-        provider,
-        userDetails,
-        roles: rolesCsv,
-        numHoursToExpiration: Number.isFinite(hours) ? Number(hours) : 24
-      }
-    };
-
-    const res = await client.staticSites.createUserRolesInvitationLink(rg, site, payload);
-
-    return (context.res = json(200, {
-      ok: true,
-      invitationUrl: res?.properties?.invitationUrl || "",
-      expiresOn: res?.properties?.expiresOn || "",
-      domainUsed: finalDomain
-    }));
-  } catch (err) {
-    context.log.error("manageUsersInvite error:", err?.message || err);
-    return (context.res = json(500, { error: "ServerError", message: err?.message || "Failed to create invitation" }));
+    return json(context, 200, { ok: true, url });
+  } catch (e) {
+    context.log.error("manageUsersInvite:", e?.message || e);
+    return json(context, 500, { error: "ServerError", message: e?.message || String(e) });
   }
 };
 
-// helpers
-function json(status, body) { return { status, headers: { "content-type": "application/json" }, body }; }
-function mustEnv(n) { const v = process.env[n]; if (!v) throw new Error(`Missing env: ${n}`); return v; }
-function parseCP(req){ try{ const h=req.headers["x-ms-client-principal"]; if(!h) return null; const d=Buffer.from(h,"base64").toString("utf8"); const cp=JSON.parse(d); cp.userRoles=(cp.userRoles||[]).filter(r=>r!=="anonymous"); return cp; }catch{return null;} }
-function hasAnyRole(cp, allowed){ if(!cp) return false; const set=new Set((cp.userRoles||[]).map(String)); return allowed.some(r=>set.has(String(r))); }
+function json(ctx, status, body){ ctx.res = { status, headers:{ "content-type":"application/json" }, body }; return ctx.res; }
+function parseCP(req){ try{ const d=Buffer.from(req.headers["x-ms-client-principal"],"base64").toString("utf8"); const cp=JSON.parse(d); return { ...cp, userRoles:(cp.userRoles||[]).filter(r=>r!=="anonymous") }; }catch{return null;} }
+function hasAnyRole(cp, allowed){ if(!cp) return false; const set=new Set((cp.userRoles||[]).map(x=>String(x).toLowerCase())); return allowed.some(r=>set.has(String(r).toLowerCase())); }
+function must(n){ const v=process.env[n]; if(!v) throw new Error(`Missing env ${n}`); return v; }

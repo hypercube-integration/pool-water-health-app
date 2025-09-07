@@ -1,4 +1,4 @@
-// FILE: src/App.jsx  (DROP-IN REPLACEMENT)
+// FILE: src/App.jsx  (DROP-IN)
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState, createContext, useContext } from "react";
 
@@ -8,7 +8,7 @@ import SettingsPanel from "./components/SettingsPanel.jsx";
 import Admin from "./pages/Manage.jsx";
 import AdminUsers from "./pages/ManageUsers.jsx";
 
-// New header (appears on every page)
+// Header on all pages
 import Header from "./components/Header.jsx";
 
 /* ---------------------- Auth context via /.auth/me ---------------------- */
@@ -18,8 +18,6 @@ export function useAuth() { return useContext(AuthCtx); }
 function AuthProvider({ children }) {
   const [user, setUser] = useState(null);   // null = loading
   const [loading, setLoading] = useState(true);
-
-  // ensure we only bootstrap the profile once per session
   const bootstrappedRef = useRef(false);
 
   async function loadMe() {
@@ -27,82 +25,44 @@ function AuthProvider({ children }) {
       setLoading(true);
       const res = await fetch("/.auth/me", { credentials: "include" });
       const json = await res.json();
-
-      // SWA can return either {clientPrincipal} or an array shape
-      const cp =
-        json?.clientPrincipal ||
-        json?.[0]?.clientPrincipal ||
-        json?.[0] ||
-        null;
-
-      // IMPORTANT: filter out 'anonymous' so isAuthenticated can be true
-      const roles = (cp?.userRoles || [])
-        .filter((r) => r && r !== "anonymous");
-
-      const nextUser = {
-        isAuthenticated: roles.length > 0, // after filtering, any role means signed-in (usually includes 'authenticated')
+      const cp = json?.clientPrincipal || json?.[0]?.clientPrincipal || json?.[0] || null;
+      const roles = (cp?.userRoles || []).filter(r => r && r !== "anonymous");
+      setUser({
+        isAuthenticated: roles.length > 0,
         roles,
-        userDetails: cp?.userDetails || "",
-        identityProvider: cp?.identityProvider || ""
-      };
-
-      setUser(nextUser);
-
-      // Auto-bootstrap profile to Cosmos (name/email) once the user is authenticated
-      if (nextUser.isAuthenticated && !bootstrappedRef.current) {
-        bootstrappedRef.current = true;
-        try {
-          await fetch("/api/profiles/bootstrap", { method: "POST", credentials: "include" });
-        } catch {
-          // non-fatal; ignore
-        }
-      }
+        userDetails: cp?.userDetails,
+        identityProvider: cp?.identityProvider?.toLowerCase(),
+        userId: cp?.userId || ""
+      });
     } catch {
       setUser({ isAuthenticated: false, roles: [] });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
   useEffect(() => { loadMe(); }, []);
+  const isAdmin = useMemo(() => (user?.roles || []).map(r=>String(r).toLowerCase()).includes("admin"), [user]);
 
-  const isAdmin = useMemo(
-    () => (user?.roles || []).map(r => String(r).toLowerCase()).some(r => r === "admin" || r === "manager"),
-    [user]
-  );
+  // One-time bootstrap to save name/email to Cosmos after sign-in
+  useEffect(() => {
+    if (!user?.isAuthenticated) return;
+    if (bootstrappedRef.current) return;
+    bootstrappedRef.current = true;
+    fetch("/api/profiles/bootstrap", { method:"POST", credentials:"include" }).catch(()=>{});
+  }, [user?.isAuthenticated]);
 
-  return (
-    <AuthCtx.Provider value={{ user, loading, isAdmin, refresh: loadMe }}>
-      {children}
-    </AuthCtx.Provider>
-  );
+  return <AuthCtx.Provider value={{ user, loading, isAdmin, refresh: loadMe }}>{children}</AuthCtx.Provider>;
 }
-
-/* --------------------------- (Optional) guard --------------------------- */
-// Re-enable later if you want: wrap admin routes with this
-// function AdminRoute({ children }) {
-//   const { loading, isAdmin } = useAuth();
-//   if (loading) return <div style={{ padding: 16 }}>Loading…</div>;
-//   if (!isAdmin) return <Navigate to="/" replace />;
-//   return children;
-// }
 
 export default function App() {
   return (
     <AuthProvider>
-      {/* Header shown on every page with AAD/GitHub login options */}
       <Header />
-
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/settings" element={<SettingsPanel />} />
-
-        {/* Admin pages */}
         <Route path="/admin" element={<Admin />} />
         <Route path="/admin/users" element={<AdminUsers />} />
-        {/* Alias path for links that use /manage-users */}
         <Route path="/manage-users" element={<AdminUsers />} />
-
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
